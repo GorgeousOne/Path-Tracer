@@ -34,6 +34,7 @@ void Renderer::render() {
 #define PI 3.14159265f
 
 void Renderer::render(Scene const& scene, Camera const& cam) {
+	auto start = std::chrono::steady_clock::now();
 	float fov_radians = cam.fov_x / 180 * PI;
 	float img_plane_dist = (width_ / 2.0f) / tan(fov_radians / 2);
 
@@ -63,12 +64,17 @@ void Renderer::render(Scene const& scene, Camera const& cam) {
 			write(pixel);
 		}
 	}
-	auto start = std::chrono::steady_clock::now();
-	ppm_.save(filename_);
 	auto end = std::chrono::steady_clock::now();
 	std::chrono::duration<double> elapsed_seconds = end-start;
+	std::cout << elapsed_seconds.count() << "s rendering\n";
+
+	start = std::chrono::steady_clock::now();
+	ppm_.save(filename_);
+	end = std::chrono::steady_clock::now();
+
+	elapsed_seconds = end-start;
 	std::cout << "save " << filename_ << "\n";
-	std::cout << elapsed_seconds.count() << "s save time\n";
+	std::cout << elapsed_seconds.count() << "s saving\n";
 }
 
 void Renderer::write(Pixel const& p) {

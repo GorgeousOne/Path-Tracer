@@ -1,10 +1,10 @@
 add_executable(example
-	example.cpp
+        example.cpp
         ../framework/shape.hpp ../framework/shape.cpp
         ../framework/sphere.hpp ../framework/sphere.cpp
         ../framework/box.hpp ../framework/box.cpp
-		../framework/triangle.hpp ../framework/triangle.cpp
-		../framework/composite.hpp ../framework/composite.cpp
+        ../framework/triangle.hpp ../framework/triangle.cpp
+        ../framework/composite.hpp ../framework/composite.cpp
 
         ../framework/ray.hpp
         ../framework/hitPoint.hpp
@@ -18,7 +18,7 @@ add_executable(example
         ../framework/pixel.hpp ../framework/pixel.cpp
         ../framework/pixel.hpp ../framework/ppmwriter.cpp
         ../framework/renderer.hpp ../framework/renderer.cpp
-	)
+        )
 
 target_link_libraries(example ${FRAMEWORK_NAME} ${LIBRARIES})
 add_dependencies(example glfw ${FRAMEWORK_NAME} ${COPY_BINARY})
@@ -41,10 +41,10 @@ add_executable(tests
         ../framework/shape.hpp ../framework/shape.cpp
         ../framework/sphere.hpp ../framework/sphere.cpp
         ../framework/box.hpp ../framework/box.cpp
-		../framework/triangle.hpp ../framework/triangle.cpp
-		../framework/composite.hpp ../framework/composite.cpp
+        ../framework/triangle.hpp ../framework/triangle.cpp
+        ../framework/composite.hpp ../framework/composite.cpp
 
-		../framework/ray.hpp
+        ../framework/ray.hpp
         ../framework/hitPoint.hpp
         ../framework/material.hpp ../framework/material.cpp
         ../framework/scene.hpp ../framework/scene.cpp
@@ -59,5 +59,12 @@ add_executable(tests
         )
 target_link_libraries(tests
         ${GLFW_LIBRARIES}
+        )
+
+add_executable(animator
+        ../framework/animation/animation.hpp ../framework/animation/animation.cpp
+        ../framework/animation/rotation.hpp ../framework/animation/rotation.cpp
+        ../framework/animation/translation.hpp ../framework/animation/translation.cpp
+        ../framework/animation/animationCreator.cpp
         )
 

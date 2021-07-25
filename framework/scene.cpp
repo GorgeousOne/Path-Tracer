@@ -2,6 +2,7 @@
 #include <sstream>
 #include <algorithm>
 #include <string>
+#include <chrono>
 
 #include "scene.hpp"
 #include "sphere.hpp"
@@ -300,6 +301,8 @@ void add_to_scene(std::istringstream& arg_stream, Scene& new_scene) {
 }
 
 Scene load_scene(std::string const& file_path) {
+
+	auto start = std::chrono::steady_clock::now();
 	Scene new_scene{};
 	std::ifstream input_sdf_file(file_path);
 	std::string line_buffer;
@@ -320,5 +323,8 @@ Scene load_scene(std::string const& file_path) {
 			render(words_stream);
 		}
 	}
+	auto end = std::chrono::steady_clock::now();
+	std::chrono::duration<double> elapsed_seconds = end-start;
+	std::cout << elapsed_seconds.count() << "s loading\n";
 	return new_scene;
 }
