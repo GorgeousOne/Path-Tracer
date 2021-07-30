@@ -86,7 +86,7 @@ void Renderer::write(Pixel const& p) {
 	ppm_.write(p);
 }
 
-HitPoint Renderer::get_closest_hit(Ray const& ray, Scene const& scene) {
+HitPoint Renderer::get_closest_hit(Ray const& ray, Scene const& scene) const {
 	HitPoint closest_hit{};
 
 	for (auto const& it : scene.shapes) {
@@ -102,7 +102,7 @@ HitPoint Renderer::get_closest_hit(Ray const& ray, Scene const& scene) {
 	return closest_hit;
 }
 
-HitPoint Renderer::find_light_block(Ray const& light_ray, float range, Scene const& scene) {
+HitPoint Renderer::find_light_block(Ray const& light_ray, float range, Scene const& scene) const {
 	for (auto const& it : scene.shapes) {
 		HitPoint hit = it.second->intersect(light_ray);
 
@@ -113,52 +113,75 @@ HitPoint Renderer::find_light_block(Ray const& light_ray, float range, Scene con
 	return HitPoint {};
 }
 
-Color Renderer::get_intersection_color(Ray const& ray, Scene const& scene) {
+Color Renderer::get_intersection_color(Ray const& ray, Scene const& scene) const {
 	HitPoint closest_hit = get_closest_hit(ray, scene);
 	return closest_hit.does_intersect ? shade(closest_hit, scene) : Color {};
 }
 
-Color Renderer::shade(HitPoint const& hitPoint, Scene const& scene) {
+Color Renderer::shade(HitPoint const& hitPoint, Scene const& scene) const {
 	Color shaded_color {0, 0, 0};
 //	shaded_color.r = hitPoint.hit_material->kd.x;
 //	shaded_color.g = hitPoint.hit_material->kd.y;
 //	shaded_color.b = hitPoint.hit_material->kd.z;
 
 //	shaded_color += normal_color(hitPoint);
-	shaded_color += ambient_color(hitPoint, scene.ambient);
-	shaded_color += diffuse_color(hitPoint, scene);
+	shaded_color += phong_color(hitPoint, scene);
 	return tone_map_color(shaded_color);
 }
 
-Color Renderer::ambient_color(HitPoint const& intersection, Light const& ambient) {
-	return ambient.color * ambient.brightness * intersection.hit_material->ka;
+Color Renderer::intensity(Light const &light) const {
+	return light.color * light.brightness;
 }
 
-Color Renderer::diffuse_color(HitPoint const& hitPoint, Scene const& scene) {
-	Color diffuse_color {};
+Color Renderer::phong_color(HitPoint const& hitPoint, Scene const& scene) const {
+	auto material = hitPoint.hit_material;
+	Color phong_color = intensity(scene.ambient) * material->ka;
 
 	for (PointLight const& light : scene.lights)  {
 		glm::vec3 light_dir = light.position - hitPoint.position;
 		float distance = glm::length(light_dir);
+		light_dir = glm::normalize(light_dir);
+		Ray light_ray {hitPoint.position, light_dir};
 
-		Ray light_ray {hitPoint.position, glm::normalize(light_dir)};
-		HitPoint light_block = find_light_block(light_ray, distance, scene);
-
-		if (light_block.does_intersect) {
+		if (find_light_block(light_ray, distance, scene).does_intersect) {
 			continue;
 		}
-		float cos_incidence_angle = glm::dot(hitPoint.surface_normal, glm::normalize(light_ray.direction));
+		glm::vec3 normal = hitPoint.surface_normal;
+		float cos_view_angle = glm::dot(normal, light_dir);
 
-		if (cos_incidence_angle < 0) {
+		//back culls
+		if (cos_view_angle < 0) {
 			continue;
 		}
-		Color light_intensity = light.color * light.brightness;
-		diffuse_color += light_intensity * hitPoint.hit_material->kd * cos_incidence_angle;
+		//adds diffuse light
+		Color light_intensity = intensity(light);
+		phong_color += light_intensity * material->kd * cos_view_angle;
+
+		if (material->m != 0) {
+			phong_color += specular_color(hitPoint.ray_direction, light_dir, normal, light_intensity, material);
+		}
 	}
-	return diffuse_color;
+	return phong_color;
 }
 
-Color Renderer::normal_color(HitPoint const& hitPoint) {
+Color Renderer::specular_color(
+		glm::vec3 const& viewer_dir,
+		glm::vec3 const& light_dir,
+		glm::vec3 const& normal,
+		Color const& light_intensity,
+		std::shared_ptr<Material> material) const {
+
+	glm::vec3 reflection_dir = 2 * glm::dot(normal, light_dir) * normal - light_dir;
+	float cos_specular_angle = glm::dot(reflection_dir, viewer_dir * -1.0f);
+
+	if (cos_specular_angle < 0) {
+		return Color{};
+	}
+	float specular_factor = pow(cos_specular_angle, material->m);
+	return light_intensity * material->ks * specular_factor;
+}
+
+Color Renderer::normal_color(HitPoint const& hitPoint) const {
 	return Color {
 			(hitPoint.surface_normal.x + 1) / 2,
 			(hitPoint.surface_normal.y + 1) / 2,
@@ -184,6 +207,8 @@ float *Renderer::pixel_buffer() const {
 	}
 	return pixel_data;
 }
+
+
 
 
 
