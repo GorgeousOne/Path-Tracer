@@ -37,18 +37,19 @@ private:
 	std::string filename_;
 	PpmWriter ppm_;
 
-	Color get_intersection_color(Ray const& ray, Scene const& scene) const;
+	Color trace(Ray const& ray, Scene const& scene, unsigned bounces) const;
 	HitPoint get_closest_hit(Ray const& ray, Scene const& scene) const;
 	HitPoint find_light_block(Ray const& light_ray, float range, Scene const& scene) const;
 
-	Color intensity(Light const& light) const;
-	Color shade(HitPoint const& hitPoint, Scene const& scene) const;
+	Color shade(HitPoint const& hit_point, Scene const& scene, unsigned bounces) const;
 	Color phong_color(HitPoint const& hitPoint, Scene const& scene) const;
 	Color specular_color(glm::vec3 const &viewer_dir, glm::vec3 const &light_dir, glm::vec3 const &normal,
 	                     Color const &light_intensity, std::shared_ptr<Material> material) const;
 
 	Color normal_color(HitPoint const& hitPoint) const;
 	Color& tone_map_color(Color &color) const;
+
+	Color reflection(HitPoint const &hitPoint, Scene const &scene, unsigned bounces) const;
 };
 
 #endif // #ifndef BUW_RENDERER_HPP

@@ -19,13 +19,17 @@ glm::vec3 load_vec(std::istringstream& arg_stream) {
 std::shared_ptr<Material> load_mat(std::istringstream& arg_stream) {
 	std::string name;
 	float brightness;
+	float glossiness;
+	float opacity;
 
 	arg_stream >> name;
 	glm::vec3 ka = load_vec(arg_stream);
 	glm::vec3 kd = load_vec(arg_stream);
 	glm::vec3 ks = load_vec(arg_stream);
 	arg_stream >> brightness;
-	return std::make_shared<Material>(Material{name, ka, kd, ks, brightness});
+	arg_stream >> glossiness;
+	arg_stream >> opacity;
+	return std::make_shared<Material>(Material{name, ka, kd, ks, brightness, glossiness, opacity});
 }
 
 std::shared_ptr<Box> load_box(std::istringstream& arg_stream, std::map<std::string, std::shared_ptr<Material>> const& materials) {
@@ -79,7 +83,7 @@ PointLight load_point_light(std::istringstream& arg_stream) {
 	arg_stream >> color.r >> color.g >> color.b;
 	arg_stream >> brightness;
 
-	return {name, color, brightness, pos};
+	return {name, color, pos, brightness};
 }
 
 Light load_ambient(std::istringstream& arg_stream) {
@@ -131,6 +135,15 @@ std::map<std::string, std::shared_ptr<Material>> load_obj_materials(std::string 
 			current_mat->ks = load_vec(arg_stream);
 		} else if ("Ns" == token) {
 			arg_stream >> current_mat->m;
+		} else if ("illum" == token) {
+			unsigned model;
+			arg_stream >> model;
+
+			switch (model) {
+				case 2:
+					current_mat->glossiness = 0.5;
+					break;
+			}
 		}
 	}
 	return materials;

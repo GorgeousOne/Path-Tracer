@@ -32,6 +32,7 @@ void Renderer::render() {
 }
 
 #define PI 3.14159265f
+#define MAX_RAY_DEPTH 2
 
 void Renderer::render(Scene const& scene, Camera const& cam) {
 	float fov_radians = cam.fov_x / 180 * PI;
@@ -59,7 +60,7 @@ void Renderer::render(Scene const& scene, Camera const& cam) {
 			glm::vec3 ray_dir{ glm::normalize(pixel_pos) };
 			Ray ray {cam.position, ray_dir};
 			Pixel pixel {x, y};
-			pixel.color = get_intersection_color(ray, scene);
+			pixel.color = trace(ray, scene, MAX_RAY_DEPTH);
 			write(pixel);
 		}
 	}
@@ -84,6 +85,11 @@ void Renderer::write(Pixel const& p) {
 		color_buffer_[buf_pos] = p.color;
 	}
 	ppm_.write(p);
+}
+
+Color Renderer::trace(Ray const& ray, Scene const& scene, unsigned ray_depth) const {
+	HitPoint closest_hit = get_closest_hit(ray, scene);
+	return closest_hit.does_intersect ? shade(closest_hit, scene, ray_depth) : Color {};
 }
 
 HitPoint Renderer::get_closest_hit(Ray const& ray, Scene const& scene) const {
@@ -113,54 +119,47 @@ HitPoint Renderer::find_light_block(Ray const& light_ray, float range, Scene con
 	return HitPoint {};
 }
 
-Color Renderer::get_intersection_color(Ray const& ray, Scene const& scene) const {
-	HitPoint closest_hit = get_closest_hit(ray, scene);
-	return closest_hit.does_intersect ? shade(closest_hit, scene) : Color {};
-}
-
-Color Renderer::shade(HitPoint const& hitPoint, Scene const& scene) const {
+Color Renderer::shade(HitPoint const& hit_point, Scene const& scene, unsigned ray_depth) const {
 	Color shaded_color {0, 0, 0};
-//	shaded_color.r = hitPoint.hit_material->kd.x;
-//	shaded_color.g = hitPoint.hit_material->kd.y;
-//	shaded_color.b = hitPoint.hit_material->kd.z;
+//	shaded_color += normal_color(hit_point);
+	shaded_color += phong_color(hit_point, scene);
 
-//	shaded_color += normal_color(hitPoint);
-	shaded_color += phong_color(hitPoint, scene);
+	if (hit_point.hit_material->m != 0 && ray_depth > 0) {
+		shaded_color += reflection(hit_point, scene, ray_depth);
+	}
 	return tone_map_color(shaded_color);
 }
 
-Color Renderer::intensity(Light const &light) const {
-	return light.color * light.brightness;
-}
-
-Color Renderer::phong_color(HitPoint const& hitPoint, Scene const& scene) const {
-	auto material = hitPoint.hit_material;
-	Color phong_color = intensity(scene.ambient) * material->ka;
+Color Renderer::phong_color(HitPoint const& hit_point, Scene const& scene) const {
+	auto material = hit_point.hit_material;
+	Color phong_color = scene.ambient.intensity * material->ka;
+	Color specular_light {};
 
 	for (PointLight const& light : scene.lights)  {
-		glm::vec3 light_dir = light.position - hitPoint.position;
+		glm::vec3 light_dir = light.position - hit_point.position;
 		float distance = glm::length(light_dir);
 		light_dir = glm::normalize(light_dir);
-		Ray light_ray {hitPoint.position, light_dir};
+		Ray light_ray {hit_point.position, light_dir};
 
 		if (find_light_block(light_ray, distance, scene).does_intersect) {
 			continue;
 		}
-		glm::vec3 normal = hitPoint.surface_normal;
+		glm::vec3 normal = hit_point.surface_normal;
 		float cos_view_angle = glm::dot(normal, light_dir);
 
-		//back culls
+		//back culls specular reflection
 		if (cos_view_angle < 0) {
 			continue;
 		}
 		//adds diffuse light
-		Color light_intensity = intensity(light);
-		phong_color += light_intensity * material->kd * cos_view_angle;
+		phong_color += (light.intensity * material->kd * cos_view_angle);
 
 		if (material->m != 0) {
-			phong_color += specular_color(hitPoint.ray_direction, light_dir, normal, light_intensity, material);
+			specular_light += specular_color(hit_point.ray_direction, light_dir, normal, light.intensity, material);
 		}
 	}
+	phong_color *= (1 - material->glossiness);
+	phong_color += specular_light * material->glossiness;
 	return phong_color;
 }
 
@@ -181,11 +180,16 @@ Color Renderer::specular_color(
 	return light_intensity * material->ks * specular_factor;
 }
 
-Color Renderer::normal_color(HitPoint const& hitPoint) const {
+Color Renderer::reflection(HitPoint const& hit_point, Scene const& scene, unsigned ray_depth) const {
+	glm::vec3 new_dir = glm::reflect(hit_point.ray_direction, hit_point.surface_normal);
+	return trace(Ray{hit_point.position, new_dir}, scene, ray_depth - 1) * hit_point.hit_material->glossiness;
+}
+
+Color Renderer::normal_color(HitPoint const& hit_point) const {
 	return Color {
-			(hitPoint.surface_normal.x + 1) / 2,
-			(hitPoint.surface_normal.y + 1) / 2,
-			(hitPoint.surface_normal.z + 1) / 2
+			(hit_point.surface_normal.x + 1) / 2,
+			(hit_point.surface_normal.y + 1) / 2,
+			(hit_point.surface_normal.z + 1) / 2
 	};
 }
 
