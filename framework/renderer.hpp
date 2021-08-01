@@ -21,7 +21,6 @@ class Renderer {
 public:
 	Renderer(unsigned w, unsigned h, std::string const& file);
 
-	void render();
 	void render(Scene const& scene, Camera const& cam);
 	void write(Pixel const& p);
 
@@ -43,13 +42,13 @@ private:
 
 	Color shade(HitPoint const& hit_point, Scene const& scene, unsigned bounces) const;
 	Color phong_color(HitPoint const& hitPoint, Scene const& scene) const;
-	Color specular_color(glm::vec3 const &viewer_dir, glm::vec3 const &light_dir, glm::vec3 const &normal,
-	                     Color const &light_intensity, std::shared_ptr<Material> material) const;
+	Color specular_color(glm::vec3 const& viewer_dir, glm::vec3 const& light_dir, glm::vec3 const& normal,
+	                     Color const& light_intensity, std::shared_ptr<Material> material) const;
 
 	Color normal_color(HitPoint const& hitPoint) const;
 	Color& tone_map_color(Color &color) const;
 
-	Color reflection(HitPoint const &hitPoint, Scene const &scene, unsigned bounces) const;
+	Color reflection(HitPoint const& hitPoint, Scene const& scene, unsigned bounces) const;
 };
 
 #endif // #ifndef BUW_RENDERER_HPP

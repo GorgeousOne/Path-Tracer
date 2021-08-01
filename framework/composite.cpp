@@ -4,10 +4,10 @@
 
 #define EPSILON 0.001f
 
-Composite::Composite(std::string const &name, std::shared_ptr<Material> material) :
+Composite::Composite(std::string const& name, std::shared_ptr<Material> material) :
 	Shape(name, material), bounds_{nullptr} {}
 
-Composite::Composite(std::shared_ptr<Box> bounds, std::string const &name, std::shared_ptr<Material> material) :
+Composite::Composite(std::shared_ptr<Box> bounds, std::string const& name, std::shared_ptr<Material> material) :
 	Shape(name, material), bounds_{bounds} {}
 
 float Composite::area() const {
@@ -48,7 +48,7 @@ glm::vec3 Composite::max() const {
 	}
 	glm::vec3 max{};
 
-	for (auto child : children_) {
+	for (auto const& child : children_) {
 		glm::vec3 child_max = child->max();
 		max.x = std::max(max.x, child_max.x);
 		max.y = std::max(max.y, child_max.y);
@@ -66,9 +66,10 @@ std::ostream &Composite::print(std::ostream &os) const {
 	return os;
 }
 
-HitPoint Composite::intersect(Ray const &ray) const {
+HitPoint Composite::intersect(Ray const& ray) const {
+	Ray trans_ray = transform_ray(ray, world_transform_inv_);
 	float t;
-	bool bounds_hit = bounds_->intersect(ray, t);
+	bool bounds_hit = bounds_->intersect(trans_ray, t);
 
 	if (!bounds_hit) {
 		return HitPoint{};
@@ -77,7 +78,7 @@ HitPoint Composite::intersect(Ray const &ray) const {
 	HitPoint min_hit {};
 
 	for (auto const& child : children_) {
-		HitPoint hit = child->intersect(ray);
+		HitPoint hit = child->intersect(trans_ray);
 
 		if (!hit.does_intersect) {
 			continue;
@@ -86,6 +87,10 @@ HitPoint Composite::intersect(Ray const &ray) const {
 			min_t = hit.distance;
 			min_hit = hit;
 		}
+	}
+	if (min_hit.does_intersect) {
+		min_hit.position = glm::vec3{world_transform_ * glm::vec4{min_hit.position, 1}};
+		min_hit.surface_normal = glm::vec3{world_transform_ * glm::vec4{min_hit.surface_normal, 0}};
 	}
 	return min_hit;
 }
@@ -101,6 +106,7 @@ unsigned Composite::child_count() {
 void Composite::build_octree() {
 	if (nullptr == bounds_) {
 		bounds_ = std::make_shared<Box>(min(), max());
+//		bounds_->transform(world_transform_);
 	}
 	if (children_.size() <= 64) {
 		return;
@@ -117,22 +123,22 @@ void Composite::build_octree() {
 			}
 		}
 	}
-	for (auto oct : subdivisions) {
-		for (auto child : children_) {
+	for (auto const& oct : subdivisions) {
+		for (auto const& child : children_) {
 			if (oct->bounds_->intersects_bounds(child)) {
 				oct->add_child(child);
 			}
 		}
 	}
-	for (auto oct : subdivisions) {
+	for (auto const& oct : subdivisions) {
 		if (oct->children_.size() == children_.size()) {
 			return;
 		}
 	}
 	children_.clear();
 
-	for (auto oct : subdivisions) {
-		if (oct->children_.size() != 0) {
+	for (auto const& oct : subdivisions) {
+		if (!oct->children_.empty()) {
 			oct->build_octree();
 			children_.push_back(oct);
 		}

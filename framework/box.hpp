@@ -19,10 +19,10 @@ public:
 
 	std::ostream& print (std::ostream &os) const override;
 
-	bool intersects_bounds(std::shared_ptr<Shape> const &shape) const;
-	bool contains(glm::vec3 const &v) const;
+	bool intersects_bounds(std::shared_ptr<Shape> const& shape) const;
+	bool contains(glm::vec3 const& v) const;
 	HitPoint intersect(Ray const& ray) const override;
-	bool intersect(Ray const &ray, float &t) const;
+	bool intersect(Ray const& ray, float &t) const;
 
 private:
 	glm::vec3 min_;

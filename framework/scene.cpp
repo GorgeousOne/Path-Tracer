@@ -259,7 +259,11 @@ std::shared_ptr<Composite> load_obj(std::string const& directory_path, std::stri
 		current_child->build_octree();
 		composite->add_child(current_child);
 	}
+#define PI 3.14159265f
+
 	composite->build_octree();
+	composite->translate(-1, -5, -12);
+	composite->rotate(PI/2, 0 ,0);
 	return composite;
 };
 

@@ -1,5 +1,7 @@
 #define CATCH_CONFIG_RUNNER
 
+#define GLM_FORCE_RADIANS
+
 #include <catch.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtx/intersect.hpp>
@@ -218,6 +220,24 @@ TEST_CASE("load_scene", "[sdf]") {
 	std::cout << scene.materials.size() << "mats\n";
 	std::cout << scene.shapes.size() << "shapes\n";
 	std::cout << scene.lights.size() << "lights\n";
+}
+
+TEST_CASE("transform ray", "[transformation]") {
+	Ray ray {{1, 0, 0}, {0, 1, 0}};
+	glm::mat4 transform(1);
+	Ray new_ray = transform_ray(ray, transform);
+	REQUIRE(glm::vec3{1, 0, 0} == new_ray.origin);
+	REQUIRE(glm::vec3{0, 1, 0} == new_ray.direction);
+
+	transform = glm::rotate(transform, PI/2, glm::vec3{0, 0, 1});
+	new_ray = transform_ray(ray, transform);
+	REQUIRE(0 == Approx(new_ray.origin.x).margin(1e-07));
+	REQUIRE(1 == Approx(new_ray.origin.y).margin(1e-07));
+	REQUIRE(0 == Approx(new_ray.origin.z).margin(1e-07));
+
+	REQUIRE(-1 == Approx(new_ray.direction.x).margin(1e-07));
+	REQUIRE(0 == Approx(new_ray.direction.y).margin(1e-07));
+	REQUIRE(0 == Approx(new_ray.direction.z).margin(1e-07));
 }
 
 int main(int argc, char *argv[]) {

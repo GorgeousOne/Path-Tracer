@@ -13,24 +13,6 @@
 Renderer::Renderer(unsigned w, unsigned h, std::string const& file)
 		: width_(w), height_(h), color_buffer_(w * h, Color{0.0, 0.0, 0.0}), filename_(file), ppm_(width_, height_) {}
 
-void Renderer::render() {
-	std::size_t const checker_pattern_size = 20;
-
-	for (unsigned y = 0; y < height_; ++y) {
-		for (unsigned x = 0; x < width_; ++x) {
-			Pixel p(x, y);
-			if (((x / checker_pattern_size) % 2) != ((y / checker_pattern_size) % 2)) {
-				p.color = Color{0.0f, 1.0f, float(x) / height_};
-			} else {
-				p.color = Color{1.0f, 0.0f, float(y) / width_};
-			}
-
-			write(p);
-		}
-	}
-	ppm_.save(filename_);
-}
-
 #define PI 3.14159265f
 #define MAX_RAY_DEPTH 2
 
