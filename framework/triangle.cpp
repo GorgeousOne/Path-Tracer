@@ -1,5 +1,4 @@
 #include "triangle.hpp"
-#include <glm/gtx/intersect.hpp>
 
 #define EPSILON 0.001f
 
@@ -22,7 +21,7 @@ Triangle::Triangle(
 		v0_{v0},
 		v1_{v1},
 		v2_{v2},
-		n_ {n} {}
+		n_{n} {}
 
 float Triangle::area() const {
 	glm::vec3 v0v1 = v1_ - v0_;
@@ -34,18 +33,18 @@ float Triangle::volume() const {
 	return 0;
 }
 
-glm::vec3 Triangle::min() const {
-	return glm::vec3 {
-		std::min(std::min(v0_.x, v1_.x), v2_.x),
-		std::min(std::min(v0_.y, v1_.y), v2_.y),
-		std::min(std::min(v0_.z, v1_.z), v2_.z)};
+glm::vec3 Triangle::min(glm::mat4 const& transform) const {
+	glm::mat4 final_transform = transform * world_transform_;
+	glm::vec3 min = glm::min(transform_vec(v0_, final_transform), transform_vec(v1_, final_transform));
+	min = glm::min(min, transform_vec(v2_, final_transform));
+	return min;
 }
 
-glm::vec3 Triangle::max() const {
-	return glm::vec3 {
-		std::max(std::max(v0_.x, v1_.x), v2_.x),
-		std::max(std::max(v0_.y, v1_.y), v2_.y),
-		std::max(std::max(v0_.z, v1_.z), v2_.z)};
+glm::vec3 Triangle::max(glm::mat4 const& transform) const {
+	glm::mat4 final_transform = transform * world_transform_;
+	glm::vec3 max = glm::max(transform_vec(v0_, final_transform), transform_vec(v1_, final_transform));
+	max = glm::max(max, transform_vec(v2_, final_transform));
+	return max;
 }
 
 std::ostream &Triangle::print(std::ostream &os) const {

@@ -38,12 +38,31 @@ float Box::volume() const {
 	return size_x() * size_y() * size_z();
 }
 
-glm::vec3 Box::min() const {
-	return min_;
+#define IDENTITY  glm::mat4()
+glm::vec3 Box::min(glm::mat4 const& transform) const {
+	glm::mat4 final_transform = transform * world_transform_;
+
+	glm::vec3 min = glm::min(transform_vec(min_, world_transform_), transform_vec(max_, world_transform_));
+	min = glm::min(min, transform_vec(glm::vec3{min_.x, min_.y, max_.z}, final_transform));
+	min = glm::min(min, transform_vec(glm::vec3{min_.x, max_.y, min_.z}, final_transform));
+	min = glm::min(min, transform_vec(glm::vec3{min_.x, max_.y, max_.z}, final_transform));
+	min = glm::min(min, transform_vec(glm::vec3{max_.x, min_.y, min_.z}, final_transform));
+	min = glm::min(min, transform_vec(glm::vec3{max_.x, min_.y, max_.z}, final_transform));
+	min = glm::min(min, transform_vec(glm::vec3{max_.x, max_.y, min_.z}, final_transform));
+	return min;
 }
 
-glm::vec3 Box::max() const {
-	return max_;
+glm::vec3 Box::max(glm::mat4 const& transform) const {
+	glm::mat4 final_transform = transform * world_transform_;
+
+	glm::vec3 max = glm::min(transform_vec(min_, final_transform), transform_vec(max_, final_transform));
+	max = glm::max(max, transform_vec(glm::vec3{min_.x, min_.y, max_.z}, final_transform));
+	max = glm::max(max, transform_vec(glm::vec3{min_.x, max_.y, min_.z}, final_transform));
+	max = glm::max(max, transform_vec(glm::vec3{min_.x, max_.y, max_.z}, final_transform));
+	max = glm::max(max, transform_vec(glm::vec3{max_.x, min_.y, min_.z}, final_transform));
+	max = glm::max(max, transform_vec(glm::vec3{max_.x, min_.y, max_.z}, final_transform));
+	max = glm::max(max, transform_vec(glm::vec3{max_.x, max_.y, min_.z}, final_transform));
+	return max;
 }
 
 std::ostream &Box::print(std::ostream &os) const {
@@ -52,8 +71,8 @@ std::ostream &Box::print(std::ostream &os) const {
 }
 
 bool Box::intersects_bounds(std::shared_ptr<Shape> const& shape) const {
-	glm::vec3 min = shape->min();
-	glm::vec3 max = shape->max();
+	glm::vec3 min = shape->min(world_transform_inv_);
+	glm::vec3 max = shape->max(world_transform_inv_);
 	return
 		(min.x >= min_.x && min.x <= max_.x || max.x >= min_.x && max.x <= max_.x || min.x < min_.x && max.x > max_.x) &&
 		(min.y >= min_.y && min.y <= max_.y || max.y >= min_.y && max.y <= max_.y || min.y < min_.y && max.y > max_.y) &&

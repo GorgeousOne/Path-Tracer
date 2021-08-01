@@ -12,7 +12,7 @@ Composite::Composite(std::shared_ptr<Box> bounds, std::string const& name, std::
 
 float Composite::area() const {
 	float area_sum = 0;
-	for (auto child : children_) {
+	for (auto const& child : children_) {
 		area_sum += child->area();
 	}
 	return area_sum;
@@ -21,38 +21,44 @@ float Composite::area() const {
 float Composite::volume() const {
 	float volume_sum = 0;
 
-	for (auto child : children_) {
+	for (auto const& child : children_) {
 		volume_sum += child->volume();
 	}
 	return volume_sum;
 }
 
-glm::vec3 Composite::min() const {
+glm::vec3 Composite::min(glm::mat4 const& transform) const {
 	if (nullptr != bounds_) {
-		return bounds_->min();
+		return bounds_->min(transform);
 	}
 	glm::vec3 min{};
-
-	for (auto child : children_) {
-		glm::vec3 child_min = child->min();
-		min.x = std::min(min.x, child_min.x);
-		min.y = std::min(min.y, child_min.y);
-		min.z = std::min(min.z, child_min.z);
+	bool is_first = true;
+	
+	for (auto const& child : children_) {
+		if (is_first) {
+			min = child->min(transform * world_transform_);
+			is_first = false;
+		}else {
+			min = glm::min(min, child->min(transform * world_transform_));
+		}
 	}
 	return min;
 }
 
-glm::vec3 Composite::max() const {
+glm::vec3 Composite::max(glm::mat4 const& transform) const {
 	if (nullptr != bounds_) {
-		return bounds_->max();
+		return bounds_->max(transform);
 	}
 	glm::vec3 max{};
+	bool is_first = true;
 
 	for (auto const& child : children_) {
-		glm::vec3 child_max = child->max();
-		max.x = std::max(max.x, child_max.x);
-		max.y = std::max(max.y, child_max.y);
-		max.z = std::max(max.z, child_max.z);
+		if (is_first) {
+			max = child->max(transform * world_transform_);
+			is_first = false;
+		}else {
+			max = glm::max(max, child->max(transform * world_transform_));
+		}
 	}
 	return max;
 }
@@ -67,13 +73,13 @@ std::ostream &Composite::print(std::ostream &os) const {
 }
 
 HitPoint Composite::intersect(Ray const& ray) const {
-	Ray trans_ray = transform_ray(ray, world_transform_inv_);
 	float t;
-	bool bounds_hit = bounds_->intersect(trans_ray, t);
+	bool bounds_hit = bounds_->intersect(ray, t);
 
 	if (!bounds_hit) {
 		return HitPoint{};
 	}
+	Ray trans_ray = transform_ray(ray, world_transform_inv_);
 	float min_t = -1;
 	HitPoint min_hit {};
 
@@ -106,7 +112,6 @@ unsigned Composite::child_count() {
 void Composite::build_octree() {
 	if (nullptr == bounds_) {
 		bounds_ = std::make_shared<Box>(min(), max());
-//		bounds_->transform(world_transform_);
 	}
 	if (children_.size() <= 64) {
 		return;

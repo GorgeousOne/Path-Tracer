@@ -240,6 +240,23 @@ TEST_CASE("transform ray", "[transformation]") {
 	REQUIRE(0 == Approx(new_ray.direction.z).margin(1e-07));
 }
 
+TEST_CASE("transform box", "[transformation]") {
+	Box box{{0, 0, 0}, {1, 1, 3}};
+	box.rotate(PI/2, 0, 0);
+
+	glm::vec3 min = box.min();
+	glm::vec3 max = box.max();
+	std::cout << min << " - " << max << "\n";
+
+	REQUIRE(0 == Approx(min.x).margin(1e-07));
+	REQUIRE(0 == Approx(min.y).margin(1e-07));
+	REQUIRE(-1 == Approx(min.z).margin(1e-07));
+
+	REQUIRE(3 == Approx(max.x).margin(1e-07));
+	REQUIRE(1 == Approx(max.y).margin(1e-07));
+	REQUIRE(0 == Approx(max.z).margin(1e-07));
+}
+
 int main(int argc, char *argv[]) {
 	return Catch::Session().run(argc, argv);
 }

@@ -1,6 +1,5 @@
 
 #include <GL/glew.h>
-#include <GLFW//glfw3.h>
 #include <iostream>
 #include <chrono>
 #include <window.hpp>
@@ -13,6 +12,8 @@ int main(int argc, const char** argv) {
 	unsigned img_height = 1000;
 
 	Scene scene = load_scene("../../sdf/example.sdf");
+//	scene.camera.position = glm::vec3 {10, 0, 30};
+
 //	scene.camera.position = glm::vec3 {-10, 5, 0};
 //	scene.camera.direction = glm::vec3 {1, 0, 0};
 

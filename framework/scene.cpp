@@ -261,9 +261,10 @@ std::shared_ptr<Composite> load_obj(std::string const& directory_path, std::stri
 	}
 #define PI 3.14159265f
 
-	composite->build_octree();
 	composite->translate(-1, -5, -12);
-	composite->rotate(PI/2, 0 ,0);
+//	composite->rotate(0, 0 , PI/2);
+	composite->rotate(PI/4, 0, 0);
+	composite->build_octree();
 	return composite;
 };
 
@@ -333,8 +334,10 @@ Scene load_scene(std::string const& file_path) {
 		}
 		if ("define" == token_str) {
 			add_to_scene(words_stream, new_scene);
-		} else if ("render") {
+		} else if ("render" == token_str) {
 			render(words_stream);
+		} else if ("transform" == token_str) {
+			
 		}
 	}
 	return new_scene;

@@ -23,8 +23,8 @@ public:
 	virtual std::string get_name() const;
 	virtual float area() const = 0;
 	virtual float volume() const = 0;
-	virtual glm::vec3 min() const = 0;
-	virtual glm::vec3 max() const = 0;
+	virtual glm::vec3 min(glm::mat4 const& transform = glm::mat4()) const = 0;
+	virtual glm::vec3 max(glm::mat4 const& transform = glm::mat4()) const = 0;
 	virtual HitPoint intersect(Ray const& ray) const = 0;
 
 	virtual void transform(glm::mat4 const& transformation);
@@ -41,6 +41,7 @@ protected:
 };
 
 std::ostream& operator<<(std::ostream& os, Shape const& s);
+glm::vec3 transform_vec(glm::vec3 const& vec, glm::mat4 const& transformation, bool is_location = true);
 Ray transform_ray(Ray const& ray, glm::mat4 const& transformation);
 
 #endif
