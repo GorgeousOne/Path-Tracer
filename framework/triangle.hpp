@@ -9,7 +9,7 @@ public:
 			glm::vec3 const& v1,
 			glm::vec3 const& v2,
 			std::string const& name = "triangle",
-			std::shared_ptr<Material> material = {});
+			std::shared_ptr<Material> material = nullptr);
 
 	Triangle(
 			glm::vec3 const& v0,
@@ -17,7 +17,7 @@ public:
 			glm::vec3 const& v2,
 			glm::vec3 const& n,
 			std::string const& name = "triangle",
-			std::shared_ptr<Material> material = {});
+			std::shared_ptr<Material> material = nullptr);
 
 	float area() const override;
 	float volume() const override;

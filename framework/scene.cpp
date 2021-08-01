@@ -101,11 +101,22 @@ Light load_ambient(std::istringstream& arg_stream) {
 Camera load_camera(std::istringstream& arg_stream) {
 	std::string name;
 	float fov_x;
+	glm::vec3 position;
+	float yaw;
+	float pitch;
+	float roll;
 
 	arg_stream >> name;
 	arg_stream >> fov_x;
+	arg_stream >> position.x;
+	arg_stream >> position.y;
+	arg_stream >> position.z;
+	arg_stream >> yaw;
+	arg_stream >> pitch;
+	arg_stream >> roll;
 
-	return {name, fov_x};
+	glm::mat4 cam_rotation = glm::eulerAngleYXZ(glm::radians(yaw), glm::radians(pitch), glm::radians(roll));
+	return {name, glm::radians(fov_x), position, transform_vec({0, 0, -1}, cam_rotation, false), transform_vec({0, 1, 0}, cam_rotation, false)};
 }
 
 std::map<std::string, std::shared_ptr<Material>> load_obj_materials(std::string const& file_path) {
@@ -259,11 +270,8 @@ std::shared_ptr<Composite> load_obj(std::string const& directory_path, std::stri
 		current_child->build_octree();
 		composite->add_child(current_child);
 	}
-#define PI 3.14159265f
-
-	composite->translate(-1, -5, -12);
-//	composite->rotate(0, 0 , PI/2);
-	composite->rotate(PI/4, 0, 0);
+//	composite->translate(0, -5, -12);
+//	composite->rotate(1.5, 0, 0);
 	composite->build_octree();
 	return composite;
 };
@@ -282,63 +290,93 @@ void render(std::istringstream& arg_stream) {
 	//NOT IMPLEMENTED FOR THIS ASSIGNMENT
 }
 
-void add_to_scene(std::istringstream& arg_stream, Scene& new_scene) {
+void add_to_scene(std::istringstream& arg_stream, Scene& scene) {
 	std::string token;
 	arg_stream >> token;
 
 	if ("material" == token) {
 		auto new_mat = load_mat(arg_stream);
-		new_scene.materials.emplace(new_mat->name, new_mat);
+		scene.materials.emplace(new_mat->name, new_mat);
 	}
 	if ("shape" == token) {
 		arg_stream >> token;
 		if ("box" == token) {
-			auto new_box = load_box(arg_stream, new_scene.materials);
-			new_scene.shapes.emplace(new_box->get_name(), new_box);
+			scene.root->add_child(load_box(arg_stream, scene.materials));
 		} else if ("sphere" == token) {
-			auto new_sphere = load_sphere(arg_stream, new_scene.materials);
-			new_scene.shapes.emplace(new_sphere->get_name(), new_sphere);
+			scene.root->add_child(load_sphere(arg_stream, scene.materials));
 		} else if ("triangle" == token) {
-			auto new_triangle = load_triangle(arg_stream, new_scene.materials);
-			new_scene.shapes.emplace(new_triangle->get_name(), new_triangle);
+			scene.root->add_child(load_triangle(arg_stream, scene.materials));
 		} else if ("obj" == token) {
 			std::string obj_file_name;
 			arg_stream >> obj_file_name;
-			auto new_composite = load_obj("../../sdf/", obj_file_name);
-			new_scene.shapes.emplace(new_composite->get_name(), new_composite);
+			scene.root->add_child(load_obj("../../sdf/", obj_file_name));
 		}
 	} else if ("light" == token) {
-		PointLight new_light{load_point_light(arg_stream)};
-		new_scene.lights.push_back(new_light);
+		scene.lights.push_back(load_point_light(arg_stream));
 	} else if ("ambient" == token) {
-		new_scene.ambient = {load_ambient(arg_stream)};
+		scene.ambient = load_ambient(arg_stream);
 	} else if ("camera" == token) {
-		new_scene.camera = {load_camera(arg_stream)};
+		scene.camera = load_camera(arg_stream);
+	}
+}
+
+void transform(std::istringstream& arg_stream, Scene& scene) {
+	std::string name;
+	std::string action;
+
+	arg_stream >> name;
+	arg_stream >> action;
+
+	auto shape = scene.root->find_child(name);
+
+	if ("translate" == action) {
+		float x;
+		float y;
+		float z;
+		arg_stream >> x;
+		arg_stream >> y;
+		arg_stream >> z;
+		shape->translate(x, y, z);
+
+	} else if ("rotate" == action) {
+		float yaw;
+		float pitch;
+		float roll;
+		arg_stream >> yaw;
+		arg_stream >> pitch;
+		arg_stream >> roll;
+		shape->rotate(yaw, pitch, roll);
+
+	} else if ("scale" == action) {
+		float scale;
+		arg_stream >> scale;
+		shape->scale(scale, scale, scale);
 	}
 }
 
 Scene load_scene(std::string const& file_path) {
-	Scene new_scene{};
+	Scene scene{};
 	std::ifstream input_sdf_file(file_path);
 	std::string line_buffer;
 
 	//writes sdf file line by line into line_buffer
 	while (std::getline(input_sdf_file, line_buffer)) {
-		std::istringstream words_stream(line_buffer);
+		std::istringstream arg_stream(line_buffer);
 		//streams words of each line
 		std::string token_str;
-		words_stream >> token_str;
+		arg_stream >> token_str;
 
 		if ("#" == token_str) {
 			continue;
 		}
 		if ("define" == token_str) {
-			add_to_scene(words_stream, new_scene);
+			add_to_scene(arg_stream, scene);
 		} else if ("render" == token_str) {
-			render(words_stream);
+			render(arg_stream);
 		} else if ("transform" == token_str) {
-			
+			transform(arg_stream, scene);
 		}
 	}
-	return new_scene;
+	scene.root->build_octree();
+	return scene;
 }

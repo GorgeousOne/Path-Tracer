@@ -29,7 +29,7 @@ public:
 
 	virtual void transform(glm::mat4 const& transformation);
 	virtual void scale(float sx, float sy, float sz);
-	void rotate(float yaw, float pitch, float roll);
+	virtual void rotate(float yaw, float pitch, float roll);
 	virtual void translate(float x, float y, float z);
 	virtual std::ostream& print (std::ostream& os) const;
 

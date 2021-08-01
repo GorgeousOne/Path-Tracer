@@ -11,17 +11,18 @@
 #include <map>
 
 struct Scene {
+	std::shared_ptr<Composite> root = std::make_shared<Composite>("root");
 	std::map<std::string, std::shared_ptr<Material>> materials{};
-	std::map<std::string, std::shared_ptr<Shape>> shapes{};
 	std::vector<PointLight> lights{};
 	Light ambient{};
 	Camera camera{};
 
-	[[nodiscard]] std::shared_ptr<Material> find_mat(std::string const& name) const;
+	std::shared_ptr<Material> find_mat(std::string const& name) const;
 };
 
+
 std::shared_ptr<Material> load_mat(std::istringstream& arg_stream);
-void add_to_scene(std::istringstream& arg_stream, Scene& new_scene);
+void add_to_scene(std::istringstream& arg_stream, Scene& scene);
 Scene load_scene(std::string const& file_path);
 
 std::map<std::string, std::shared_ptr<Material>> load_obj_materials(std::string const& file_path);

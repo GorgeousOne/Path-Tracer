@@ -17,30 +17,18 @@ Renderer::Renderer(unsigned w, unsigned h, std::string const& file)
 #define MAX_RAY_DEPTH 2
 
 void Renderer::render(Scene const& scene, Camera const& cam) {
-	float fov_radians = cam.fov_x / 180 * PI;
-	float img_plane_dist = (width_ / 2.0f) / tan(fov_radians / 2);
+	glm::vec4 u = glm::vec4(glm::cross(cam.direction, cam.up), 0);
+	glm::vec4 v = glm::vec4(glm::cross({u.x, u.y, u.z}, cam.direction), 0);
+	glm::mat4 c {u, v, glm::vec4{-cam.direction, 0}, glm::vec4{cam.position, 1}};
 
-	glm::vec3 pixel_width = glm::cross(cam.direction, cam.up);
-	glm::vec3 pixel_height {cam.up};
-	assert(1.0f == 	glm::length(pixel_width));
-
-	// corner of img_plane relative to camera
-	glm::vec3 min_corner =
-			img_plane_dist * cam.direction
-			- (width_ / 2.0f) * pixel_width
-			- (height_ / 2.0f) * pixel_height;
+	float img_plane_dist = (width_ / 2.0f) / tan(cam.fov_x / 2);
+	float min_x = -(width_ / 2.0f);
+	float min_y = -(height_ / 2.0f);
 
 	for (unsigned x = 0; x < width_; ++x) {
 		for (unsigned y = 0; y < height_; ++y) {
-
-			// vector for 3D position of 2D pixel relative to camera
-			glm::vec3 pixel_pos {
-				min_corner
-				+ static_cast<float>(x) * pixel_width
-				+ static_cast<float>(y) * pixel_height};
-			
-			glm::vec3 ray_dir{ glm::normalize(pixel_pos) };
-			Ray ray {cam.position, ray_dir};
+			glm::vec3 ray_dir = glm::normalize(glm::vec3{min_x + x, min_y + y, -img_plane_dist});
+			Ray ray = transform_ray({{}, ray_dir}, c);
 			Pixel pixel {x, y};
 			pixel.color = trace(ray, scene, MAX_RAY_DEPTH);
 			write(pixel);
@@ -76,27 +64,22 @@ Color Renderer::trace(Ray const& ray, Scene const& scene, unsigned ray_depth) co
 
 HitPoint Renderer::get_closest_hit(Ray const& ray, Scene const& scene) const {
 	HitPoint closest_hit{};
+	HitPoint hit = scene.root->intersect(ray);
 
-	for (auto const& it : scene.shapes) {
-		HitPoint hit = it.second->intersect(ray);
-
-		if (!hit.does_intersect) {
-			continue;
-		}
-		if (!closest_hit.does_intersect || hit.distance < closest_hit.distance) {
-			closest_hit = hit;
-		}
+	if (!hit.does_intersect) {
+		return hit;
+	}
+	if (!closest_hit.does_intersect || hit.distance < closest_hit.distance) {
+		closest_hit = hit;
 	}
 	return closest_hit;
 }
 
 HitPoint Renderer::find_light_block(Ray const& light_ray, float range, Scene const& scene) const {
-	for (auto const& it : scene.shapes) {
-		HitPoint hit = it.second->intersect(light_ray);
+	HitPoint hit = scene.root->intersect(light_ray);
 
-		if (hit.does_intersect && hit.distance <= range) {
-			return hit;
-		}
+	if (hit.does_intersect && hit.distance <= range) {
+		return hit;
 	}
 	return HitPoint {};
 }

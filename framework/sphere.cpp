@@ -2,7 +2,6 @@
 #include <cmath>   //pow
 
 #include <glm/glm.hpp>
-#include <glm/gtx/intersect.hpp>
 
 #define PI 3.14159265f
 #define EPSILON 0.001f
