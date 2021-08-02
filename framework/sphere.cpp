@@ -42,8 +42,9 @@ HitPoint Sphere::intersect(Ray const& ray) const {
 			t);
 
 	if (does_intersect) {
+		t /= glm::length(ray_inv.direction);
 		t -= EPSILON;
-		glm::vec3 intersection = ray.point(t);
+		glm::vec3 intersection = transform_vec(ray_inv.point(t), world_transform_);
 		return {does_intersect, t, name_, material_, intersection, ray.direction, surface_normal(intersection)};
 	}else {
 		return {};

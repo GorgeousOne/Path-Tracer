@@ -249,7 +249,7 @@ TEST_CASE("transform box", "[transformation]") {
 	REQUIRE(0 == Approx(max.z).margin(1e-07));
 }
 
-TEST_CASE("transform sphere", "[transformation]") {
+TEST_CASE("scale sphere", "[transformation]") {
 	Sphere sphere{1, {0, 0, 0}};
 	sphere.scale(2, 2, 2);
 
