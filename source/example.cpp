@@ -15,6 +15,7 @@ int main(int argc, const char** argv) {
 	Renderer renderer{img_width, img_height, "../../sdf/img.ppm"};
 	std::cout << "shapes " << scene.root->child_count() << "\n";
 	std::cout << "lights " << scene.lights.size() << "\n";
+	std::cout << *scene.root->find_child("blue_sphere2") << "\n";
 
 	try {
 		auto start = std::chrono::steady_clock::now();

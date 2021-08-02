@@ -27,17 +27,16 @@ glm::vec3 Sphere::max(glm::mat4 const& transform) const {
 	return center_ + glm::vec3 {radius_, radius_, radius_};
 }
 
-//Aufgabe 5.5
 std::ostream& Sphere::print(std::ostream &os) const {
 	Shape::print(os);
-	return os << "\nradius: " << radius_ << "\ncenter: " << center_ << std::endl;
+	return os << "\nradius: " << radius_ << "\ncenter: " << transform_vec(center_, world_transform_) << std::endl;
 }
 
-//Aufgabe 5.6
 HitPoint Sphere::intersect(Ray const& ray) const {
+	Ray ray_inv = transform_ray(ray, world_transform_inv_);
 	float t;
 	bool does_intersect = glm::intersectRaySphere(
-			ray.origin, glm::normalize(ray.direction),
+			ray_inv.origin, glm::normalize(ray_inv.direction),
 			center_,
 			radius_ * radius_,
 			t);
@@ -45,12 +44,12 @@ HitPoint Sphere::intersect(Ray const& ray) const {
 	if (does_intersect) {
 		t -= EPSILON;
 		glm::vec3 intersection = ray.point(t);
-		return {does_intersect, t, name_, material_, intersection, ray.direction, get_surface_normal(intersection)};
+		return {does_intersect, t, name_, material_, intersection, ray.direction, surface_normal(intersection)};
 	}else {
 		return {};
 	}
 }
 
-glm::vec3 Sphere::get_surface_normal(glm::vec3 const& intersection) const {
-	return glm::normalize(intersection - center_);
+glm::vec3 Sphere::surface_normal(glm::vec3 const& intersection) const {
+	return glm::normalize(intersection - transform_vec(center_, world_transform_));
 }

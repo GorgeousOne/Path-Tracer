@@ -161,7 +161,7 @@ TEST_CASE("composite_ray_intersection", "[intersect]") {
 	auto sphere = std::make_shared<Sphere>(Sphere {1, {0, 0, -1}, "back"});
 	auto box = std::make_shared<Box>(Box {{-1, -1, 0}, {1, 1, 2}, "front"});
 
-	Composite comp {};
+	Composite comp {"root"};
 	comp.add_child(sphere);
 	comp.add_child(box);
 	comp.build_octree();
@@ -214,14 +214,6 @@ TEST_CASE("load_material", "[sdf]") {
 	REQUIRE(10 == mat->m);
 }
 
-TEST_CASE("load_scene", "[sdf]") {
-	Scene scene = load_scene("C:/Users/Fred Feuerpferd/Documents/Univ/Programmiersprachen/Belege/programmiersprachen-raytracer/misc/example.sdf");
-	std::cout << "\n";
-	std::cout << scene.materials.size() << "mats\n";
-	std::cout << scene.shapes.size() << "shapes\n";
-	std::cout << scene.lights.size() << "lights\n";
-}
-
 TEST_CASE("transform ray", "[transformation]") {
 	Ray ray {{1, 0, 0}, {0, 1, 0}};
 	glm::mat4 transform(1);
@@ -255,6 +247,15 @@ TEST_CASE("transform box", "[transformation]") {
 	REQUIRE(3 == Approx(max.x).margin(1e-07));
 	REQUIRE(1 == Approx(max.y).margin(1e-07));
 	REQUIRE(0 == Approx(max.z).margin(1e-07));
+}
+
+TEST_CASE("transform sphere", "[transformation]") {
+	Sphere sphere{1, {0, 0, 0}};
+	sphere.scale(2, 2, 2);
+
+	Ray ray{{0, 0, 10}, {0, 0, -1}};
+	HitPoint hit = sphere.intersect(ray);
+	std::cout << hit.position << " - " << hit.surface_normal;
 }
 
 int main(int argc, char *argv[]) {

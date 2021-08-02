@@ -63,7 +63,6 @@ glm::vec3 Composite::max(glm::mat4 const& transform) const {
 	return max;
 }
 
-
 std::ostream &Composite::print(std::ostream &os) const {
 	Shape::print(os);
 
@@ -81,12 +80,12 @@ HitPoint Composite::intersect(Ray const& ray) const {
 	if (!bounds_hit) {
 		return HitPoint{};
 	}
-	Ray trans_ray = transform_ray(ray, world_transform_inv_);
+	Ray ray_inv = transform_ray(ray, world_transform_inv_);
 	float min_t = -1;
 	HitPoint min_hit {};
 
 	for (auto const& it : children_) {
-		HitPoint hit = it.second->intersect(trans_ray);
+		HitPoint hit = it.second->intersect(ray_inv);
 
 		if (!hit.does_intersect) {
 			continue;
@@ -97,8 +96,8 @@ HitPoint Composite::intersect(Ray const& ray) const {
 		}
 	}
 	if (min_hit.does_intersect) {
-		min_hit.position = glm::vec3{world_transform_ * glm::vec4{min_hit.position, 1}};
-		min_hit.surface_normal = glm::vec3{world_transform_ * glm::vec4{min_hit.surface_normal, 0}};
+		min_hit.position = transform_vec(min_hit.position, world_transform_);
+		min_hit.surface_normal = glm::normalize(transform_vec(min_hit.surface_normal, world_transform_, false));
 	}
 	return min_hit;
 }
