@@ -1,10 +1,11 @@
 # materials
 define ambient amb 1 1 1 1
+define material gray 0.7 0.7 0.7 0.7 0.7 0.7 0.7 0.7 0.7 0 0 1
 define material white 1 1 1 1 1 1 1 1 1 0 0 1
-define material red 1 0 0 1 0 0 1 0 0 0 0 1
-define material green 0 1 0 0 1 0 0 1 0 0 0 1
+define material red .8 0 0 .8 0 0 .8 0 0 0 0 1
+define material green 0 .7 0 0 .7 0 0 .7 0 0 0 1
 define material metallic 1 1 1 1 1 1 1 1 1 500 1 1
-define material blue_acrylic 0 0 1 0 0 1 0 0 1 500 0.3 1
+define material blue 0.3 0.3 1 0.3 0.3 1 0.3 0.3 1 0 0 1
 
 # geometry
 define shape box red_wall 0 0 0 1 10 10 red
@@ -19,15 +20,19 @@ transform floor translate -5 -1 -5
 transform ceiling translate -5 10 -5
 transform back translate -5 0 -6
 
-define shape sphere ball1 0 0 0 1 metallic
-define shape box box1 -1 -1 -1 1 2.236 1  white
+define shape sphere ball1 0 0 0 1 blue
+define shape box box1 -1 -1 -1 1 2.236 1  gray
 
 transform ball1 translate 2 1 0
 transform box1 translate -2 1 -2
 transform box1 rotate 35 0 0
 
 # light - from right above
-define light lamp 0 9 0 .2 .2 .2 1
+define light lamp 0 9 0 .2 .2 .2 .02
+define light lamp1 -1 9 -1 .2 .2 .2 .02
+define light lamp2 1 9 -1 .2 .2 .2 .02
+define light lamp3 1 9 1 .2 .2 .2 .02
+define light lamp4 -1 9 1 .2 .2 .2 .02
 
 # camera
 define camera eye 60.0 0 5 13.66 0 0 0

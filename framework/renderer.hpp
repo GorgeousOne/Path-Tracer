@@ -38,11 +38,11 @@ private:
 
 	std::vector<glm::vec3> normal_hemisphere_;
 
-	Color trace(Ray const& ray, Scene const& scene, unsigned bounces) const;
+	Color trace(Ray const& ray, Scene const& scene, unsigned bounces, unsigned bounce_depth) const;
 	HitPoint get_closest_hit(Ray const& ray, Scene const& scene) const;
 	HitPoint find_light_block(Ray const& light_ray, float range, Scene const& scene) const;
 
-	Color shade(HitPoint const& hit_point, Scene const& scene, unsigned bounces) const;
+	Color shade(HitPoint const& hit_point, Scene const& scene, unsigned bounces, unsigned bounce_depth) const;
 	Color phong_color(HitPoint const& hitPoint, Scene const& scene) const;
 	Color specular_color(glm::vec3 const& viewer_dir, glm::vec3 const& light_dir, glm::vec3 const& normal,
 	                     Color const& light_intensity, std::shared_ptr<Material> material) const;
@@ -52,7 +52,7 @@ private:
 
 	Color reflection(HitPoint const& hitPoint, Scene const& scene, unsigned bounces) const;
 
-	Color photon_color(HitPoint const &hit_point, Scene const &scene) const;
+	Color photon_color(HitPoint const &hit_point, Scene const &scene, unsigned bounce_depth) const;
 	std::vector<Ray> ray_hemisphere(glm::vec3 const &origin, glm::vec3 const &normal) const;
 };
 

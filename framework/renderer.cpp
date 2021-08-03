@@ -8,25 +8,25 @@
 // -----------------------------------------------------------------------------
 
 #include <chrono>
+#include <iomanip>
 #include "renderer.hpp"
 
 #define PI 3.14159265f
+#define NORMAL_COUNT 100
 
 Renderer::Renderer(unsigned w, unsigned h, std::string const& file)
 		: width_(w), height_(h), color_buffer_(w * h, Color{0.0, 0.0, 0.0}), filename_(file), ppm_(width_, height_) {
 
-	unsigned normal_count = 100;
 	float turnFraction = (1 + sqrt(5)) / 2;
 
-	for (unsigned i = 0; i < normal_count; ++i) {
-		float t = i / (normal_count - 1.0f);
-		//apparently this is called azimuth and inclination/altidude
+	for (unsigned i = 0; i < NORMAL_COUNT; ++i) {
+		float t = i / (NORMAL_COUNT - 1.0f);
 		float pitch = acos(t);
 		float yaw = 2*PI * turnFraction * i;
 
 		float x = sin(pitch) * cos(yaw);
-		float z = sin(pitch) * sin(yaw);
-		float y = cos(pitch);
+		float y = sin(pitch) * sin(yaw);
+		float z = cos(pitch);
 		normal_hemisphere_.emplace_back(x, y, z);
 	}
 	std::cout << normal_hemisphere_.size() << " rays\n";
@@ -36,6 +36,8 @@ Renderer::Renderer(unsigned w, unsigned h, std::string const& file)
 #define MAX_RAY_DEPTH 2
 
 void Renderer::render(Scene const& scene, Camera const& cam) {
+	auto start = std::chrono::steady_clock::now();
+
 	glm::vec4 u = glm::vec4(glm::cross(cam.direction, cam.up), 0);
 	glm::vec4 v = glm::vec4(glm::cross({u.x, u.y, u.z}, cam.direction), 0);
 	glm::mat4 c {u, v, glm::vec4{-cam.direction, 0}, glm::vec4{cam.position, 1}};
@@ -44,21 +46,27 @@ void Renderer::render(Scene const& scene, Camera const& cam) {
 	float min_x = -(width_ / 2.0f);
 	float min_y = -(height_ / 2.0f);
 
+	float percent = 0;
+	std::cout << std::fixed;
+	std::cout << std::setprecision(2);
+
 	for (unsigned x = 0; x < width_; ++x) {
 		for (unsigned y = 0; y < height_; ++y) {
 			glm::vec3 ray_dir = glm::normalize(glm::vec3{min_x + x, min_y + y, -img_plane_dist});
 			Ray ray = transform_ray({{}, ray_dir}, c);
 			Pixel pixel {x, y};
-			pixel.color = trace(ray, scene, MAX_RAY_DEPTH);
+			pixel.color = trace(ray, scene, MAX_RAY_DEPTH, 1);
 			write(pixel);
 		}
+		if (x >= (percent+0.01) * width_) {
+			percent += 0.01f;
+			auto end = std::chrono::steady_clock::now();
+			std::chrono::duration<double> elapsed_seconds = end-start;
+			std::cout << static_cast<int>(100*percent) << "%  " << elapsed_seconds.count() << "s    ~" << elapsed_seconds.count() / percent << "s\n";
+		}
 	}
-	auto start = std::chrono::steady_clock::now();
 	ppm_.save(filename_);
-	auto end = std::chrono::steady_clock::now();
-	std::chrono::duration<double> elapsed_seconds = end-start;
 	std::cout << "save " << filename_ << "\n";
-	std::cout << elapsed_seconds.count() << "s save time\n";
 }
 
 void Renderer::write(Pixel const& p) {
@@ -76,9 +84,9 @@ void Renderer::write(Pixel const& p) {
 	ppm_.write(p);
 }
 
-Color Renderer::trace(Ray const& ray, Scene const& scene, unsigned ray_depth) const {
+Color Renderer::trace(Ray const& ray, Scene const& scene, unsigned ray_depth, unsigned bounce_depth) const {
 	HitPoint closest_hit = get_closest_hit(ray, scene);
-	return closest_hit.does_intersect ? shade(closest_hit, scene, ray_depth) : Color {};
+	return closest_hit.does_intersect ? shade(closest_hit, scene, ray_depth, bounce_depth) : Color {};
 }
 
 HitPoint Renderer::get_closest_hit(Ray const& ray, Scene const& scene) const {
@@ -103,13 +111,11 @@ HitPoint Renderer::find_light_block(Ray const& light_ray, float range, Scene con
 	return HitPoint {};
 }
 
-Color Renderer::shade(HitPoint const& hit_point, Scene const& scene, unsigned ray_depth) const {
-	Color shaded_color {0, 0, 0};
-//	shaded_color += normal_color(hit_point);
-	if (ray_depth > 0) {
-		if (hit_point.hit_material->glossiness != 1) {
-			shaded_color += photon_color(hit_point, scene);
-		}
+Color Renderer::shade(HitPoint const& hit_point, Scene const& scene, unsigned ray_depth, unsigned bounce_depth) const {
+	Color shaded_color {};
+
+	if (bounce_depth > 0) {
+		shaded_color += photon_color(hit_point, scene, bounce_depth);
 	}else {
 		shaded_color += phong_color(hit_point, scene);
 	}
@@ -174,14 +180,14 @@ Color Renderer::specular_color(
 
 Color Renderer::reflection(HitPoint const& hit_point, Scene const& scene, unsigned ray_depth) const {
 	glm::vec3 new_dir = glm::reflect(hit_point.ray_direction, hit_point.surface_normal);
-	return trace(Ray{hit_point.position, new_dir}, scene, ray_depth - 1) * hit_point.hit_material->glossiness;
+	return trace(Ray{hit_point.position, new_dir}, scene, ray_depth - 1, 0) * hit_point.hit_material->glossiness;
 }
 
-Color Renderer::photon_color(HitPoint const& hit_point, Scene const& scene) const {
+Color Renderer::photon_color(HitPoint const& hit_point, Scene const& scene, unsigned bounce_depth) const {
 	Color photon_light{};
 
 	for (Ray const& ray : ray_hemisphere(hit_point.position, hit_point.surface_normal)) {
-		photon_light += trace(ray, scene, 0);
+		photon_light += trace(ray, scene, 0, bounce_depth - 1);
 	}
 	return photon_light *= hit_point.hit_material->kd * (1 - hit_point.hit_material->glossiness);
 }
@@ -228,8 +234,3 @@ float *Renderer::pixel_buffer() const {
 	}
 	return pixel_data;
 }
-
-
-
-
-
