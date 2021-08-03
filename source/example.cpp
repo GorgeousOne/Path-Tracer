@@ -8,11 +8,11 @@
 #include "renderer.hpp"
 
 int main(int argc, const char** argv) {
-	unsigned img_width = 1000;
-	unsigned img_height = 1000;
+	unsigned img_width = 400;
+	unsigned img_height = img_width;
 
-	Scene scene = load_scene("../../sdf/example.sdf");
-	Renderer renderer{img_width, img_height, "../../sdf/img.ppm"};
+	Scene scene = load_scene("../../sdf/cornell-box.sdf");
+	Renderer renderer{img_width, img_height, "../../sdf/cornell-box.ppm"};
 	std::cout << "shapes " << scene.root->child_count() << "\n";
 	std::cout << "lights " << scene.lights.size() << "\n";
 

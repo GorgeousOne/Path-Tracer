@@ -10,8 +10,27 @@
 #include <chrono>
 #include "renderer.hpp"
 
+#define PI 3.14159265f
+
 Renderer::Renderer(unsigned w, unsigned h, std::string const& file)
-		: width_(w), height_(h), color_buffer_(w * h, Color{0.0, 0.0, 0.0}), filename_(file), ppm_(width_, height_) {}
+		: width_(w), height_(h), color_buffer_(w * h, Color{0.0, 0.0, 0.0}), filename_(file), ppm_(width_, height_) {
+
+	unsigned normal_count = 100;
+	float turnFraction = (1 + sqrt(5)) / 2;
+
+	for (unsigned i = 0; i < normal_count; ++i) {
+		float t = i / (normal_count - 1.0f);
+		//apparently this is called azimuth and inclination/altidude
+		float pitch = acos(t);
+		float yaw = 2*PI * turnFraction * i;
+
+		float x = sin(pitch) * cos(yaw);
+		float z = sin(pitch) * sin(yaw);
+		float y = cos(pitch);
+		normal_hemisphere_.emplace_back(x, y, z);
+	}
+	std::cout << normal_hemisphere_.size() << " rays\n";
+}
 
 #define PI 3.14159265f
 #define MAX_RAY_DEPTH 2
@@ -87,9 +106,15 @@ HitPoint Renderer::find_light_block(Ray const& light_ray, float range, Scene con
 Color Renderer::shade(HitPoint const& hit_point, Scene const& scene, unsigned ray_depth) const {
 	Color shaded_color {0, 0, 0};
 //	shaded_color += normal_color(hit_point);
-	shaded_color += phong_color(hit_point, scene);
+	if (ray_depth > 0) {
+		if (hit_point.hit_material->glossiness != 1) {
+			shaded_color += photon_color(hit_point, scene);
+		}
+	}else {
+		shaded_color += phong_color(hit_point, scene);
+	}
 
-	if (hit_point.hit_material->m != 0 && ray_depth > 0) {
+	if (hit_point.hit_material->glossiness != 0 && ray_depth > 0) {
 		shaded_color += reflection(hit_point, scene, ray_depth);
 	}
 	return tone_map_color(shaded_color);
@@ -97,7 +122,7 @@ Color Renderer::shade(HitPoint const& hit_point, Scene const& scene, unsigned ra
 
 Color Renderer::phong_color(HitPoint const& hit_point, Scene const& scene) const {
 	auto material = hit_point.hit_material;
-	Color phong_color = scene.ambient.intensity * material->ka;
+	Color phong_color{}; //= scene.ambient.intensity * material->ka;
 	Color specular_light {};
 
 	for (PointLight const& light : scene.lights)  {
@@ -117,12 +142,14 @@ Color Renderer::phong_color(HitPoint const& hit_point, Scene const& scene) const
 			continue;
 		}
 		//adds diffuse light
-		phong_color += (light.intensity * material->kd * cos_view_angle);
-
-		if (material->m != 0) {
+		if (material->glossiness != 1) {
+			phong_color += (light.intensity * material->kd * cos_view_angle);
+		}
+		if (material->glossiness != 0) {
 			specular_light += specular_color(hit_point.ray_direction, light_dir, normal, light.intensity, material);
 		}
 	}
+
 	phong_color *= (1 - material->glossiness);
 	phong_color += specular_light * material->glossiness;
 	return phong_color;
@@ -148,6 +175,31 @@ Color Renderer::specular_color(
 Color Renderer::reflection(HitPoint const& hit_point, Scene const& scene, unsigned ray_depth) const {
 	glm::vec3 new_dir = glm::reflect(hit_point.ray_direction, hit_point.surface_normal);
 	return trace(Ray{hit_point.position, new_dir}, scene, ray_depth - 1) * hit_point.hit_material->glossiness;
+}
+
+Color Renderer::photon_color(HitPoint const& hit_point, Scene const& scene) const {
+	Color photon_light{};
+
+	for (Ray const& ray : ray_hemisphere(hit_point.position, hit_point.surface_normal)) {
+		photon_light += trace(ray, scene, 0);
+	}
+	return photon_light *= hit_point.hit_material->kd * (1 - hit_point.hit_material->glossiness);
+}
+
+glm::mat4 get_normal_rotation(glm::vec3 const& normal) {
+	float pitch = acos(normal.y);
+	float yaw = atan2(normal.x, normal.z);
+	return glm::eulerAngleYX(yaw, pitch);
+}
+
+std::vector<Ray> Renderer::ray_hemisphere(glm::vec3 const& origin, glm::vec3 const& normal) const {
+	glm::mat4 rotation = get_normal_rotation(normal);
+	std::vector<Ray> rays;
+
+	for (glm::vec3 const& dir : normal_hemisphere_) {
+		rays.push_back({origin, transform_vec(dir, rotation, false)});
+	}
+	return rays;
 }
 
 Color Renderer::normal_color(HitPoint const& hit_point) const {

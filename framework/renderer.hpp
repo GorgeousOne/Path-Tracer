@@ -36,6 +36,8 @@ private:
 	std::string filename_;
 	PpmWriter ppm_;
 
+	std::vector<glm::vec3> normal_hemisphere_;
+
 	Color trace(Ray const& ray, Scene const& scene, unsigned bounces) const;
 	HitPoint get_closest_hit(Ray const& ray, Scene const& scene) const;
 	HitPoint find_light_block(Ray const& light_ray, float range, Scene const& scene) const;
@@ -49,6 +51,9 @@ private:
 	Color& tone_map_color(Color &color) const;
 
 	Color reflection(HitPoint const& hitPoint, Scene const& scene, unsigned bounces) const;
+
+	Color photon_color(HitPoint const &hit_point, Scene const &scene) const;
+	std::vector<Ray> ray_hemisphere(glm::vec3 const &origin, glm::vec3 const &normal) const;
 };
 
 #endif // #ifndef BUW_RENDERER_HPP
