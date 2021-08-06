@@ -61,3 +61,14 @@ target_link_libraries(tests
         ${GLFW_LIBRARIES}
         )
 
+add_executable(diffuseraytest
+		diffuseraytest.cpp
+		)
+
+target_link_libraries(diffuseraytest ${FRAMEWORK_NAME} ${LIBRARIES}
+		glfw
+		${GLFW_LIBRARIES}
+		)
+
+add_dependencies(diffuseraytest glfw ${FRAMEWORK_NAME} ${COPY_BINARY})
+

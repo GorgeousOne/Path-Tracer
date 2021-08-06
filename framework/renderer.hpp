@@ -12,6 +12,7 @@
 
 #include <string>
 #include <glm/glm.hpp>
+#include <atomic>
 #include "color.hpp"
 #include "pixel.hpp"
 #include "ppmwriter.hpp"
@@ -22,8 +23,10 @@ public:
 	Renderer(unsigned w, unsigned h, std::string const& file);
 
 	void render(Scene const& scene, Camera const& cam);
-	void write(Pixel const& p);
+	void render_threaded(Scene const &scene, Camera const &cam);
+	void thread_function(Scene const &scene, glm::mat4 const& c, float min_x, float min_y, float img_dist);
 
+	void write(Pixel const& p);
 	inline std::vector<Color> const& color_buffer() const {
 		return color_buffer_;
 	}
@@ -36,7 +39,9 @@ private:
 	std::string filename_;
 	PpmWriter ppm_;
 
-	std::vector<glm::vec3> normal_hemisphere_;
+	std::vector<glm::vec3> normal_sphere_;
+	std::atomic_uint pixel_index_;
+	std::atomic<float> progress;
 
 	Color trace(Ray const& ray, Scene const& scene, unsigned bounces, unsigned bounce_depth) const;
 	HitPoint get_closest_hit(Ray const& ray, Scene const& scene) const;
@@ -54,6 +59,7 @@ private:
 
 	Color photon_color(HitPoint const &hit_point, Scene const &scene, unsigned bounce_depth) const;
 	std::vector<Ray> ray_hemisphere(glm::vec3 const &origin, glm::vec3 const &normal) const;
+
 };
 
 #endif // #ifndef BUW_RENDERER_HPP

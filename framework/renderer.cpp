@@ -9,10 +9,11 @@
 
 #include <chrono>
 #include <iomanip>
+#include <thread>
 #include "renderer.hpp"
 
 #define PI 3.14159265f
-#define NORMAL_COUNT 100
+#define NORMAL_COUNT 200
 
 Renderer::Renderer(unsigned w, unsigned h, std::string const& file)
 		: width_(w), height_(h), color_buffer_(w * h, Color{0.0, 0.0, 0.0}), filename_(file), ppm_(width_, height_) {
@@ -21,15 +22,15 @@ Renderer::Renderer(unsigned w, unsigned h, std::string const& file)
 
 	for (unsigned i = 0; i < NORMAL_COUNT; ++i) {
 		float t = i / (NORMAL_COUNT - 1.0f);
-		float pitch = acos(t);
+		float pitch = acos(1 - 2*t);
 		float yaw = 2*PI * turnFraction * i;
 
 		float x = sin(pitch) * cos(yaw);
 		float y = sin(pitch) * sin(yaw);
 		float z = cos(pitch);
-		normal_hemisphere_.emplace_back(x, y, z);
+		normal_sphere_.emplace_back(x, y, z);
 	}
-	std::cout << normal_hemisphere_.size() << " rays\n";
+	std::cout << normal_sphere_.size() << " rays\n";
 }
 
 #define PI 3.14159265f
@@ -59,14 +60,71 @@ void Renderer::render(Scene const& scene, Camera const& cam) {
 			write(pixel);
 		}
 		if (x >= (percent+0.01) * width_) {
-			percent += 0.01f;
 			auto end = std::chrono::steady_clock::now();
 			std::chrono::duration<double> elapsed_seconds = end-start;
 			std::cout << static_cast<int>(100*percent) << "%  " << elapsed_seconds.count() << "s    ~" << elapsed_seconds.count() / percent << "s\n";
+			percent += 0.01f;
 		}
 	}
 	ppm_.save(filename_);
 	std::cout << "save " << filename_ << "\n";
+}
+
+void Renderer::render_threaded(Scene const& scene, Camera const& cam) {
+	pixel_index_ = 0;
+
+	auto start = std::chrono::steady_clock::now();
+
+	glm::vec4 u = glm::vec4(glm::cross(cam.direction, cam.up), 0);
+	glm::vec4 v = glm::vec4(glm::cross({u.x, u.y, u.z}, cam.direction), 0);
+	glm::mat4 c {u, v, glm::vec4{-cam.direction, 0}, glm::vec4{cam.position, 1}};
+
+	float img_plane_dist = (width_ / 2.0f) / tan(cam.fov_x / 2);
+	float min_x = -(width_ / 2.0f);
+	float min_y = -(height_ / 2.0f);
+
+	float percent = 0;
+	std::cout << std::fixed;
+	std::cout << std::setprecision(2);
+
+	const size_t thread_count = std::thread::hardware_concurrency();
+	std::cout << "using " << thread_count << " threads to render\n";
+
+	std::vector<std::thread> threads;
+	threads.resize(thread_count);
+
+	for (std::thread& t : threads) {
+		t = std::thread(&Renderer::thread_function, this, scene, c, min_x, min_y, img_plane_dist);
+	}
+	for (std::thread& t : threads) {
+		t.join();
+	}
+	ppm_.save(filename_);
+	std::cout << "save " << filename_ << "\n";
+}
+
+void Renderer::thread_function(Scene const& scene, glm::mat4 const& c, float min_x, float min_y, float img_dist) {
+	while(true) {
+		unsigned current_index = pixel_index_++;
+//		++pixel_index_;
+
+		if (current_index >= width_ * height_) {
+			return;
+		}
+		unsigned x = current_index / width_;
+		unsigned y = current_index % width_;
+
+		glm::vec3 ray_dir = glm::normalize(glm::vec3{min_x + x, min_y + y, -img_dist});
+		Ray ray = transform_ray({{}, ray_dir}, c);
+		Pixel pixel{x, y};
+		pixel.color = trace(ray, scene, MAX_RAY_DEPTH, 1);
+		write(pixel);
+
+		if (x >= (progress + 0.01) * width_) {
+			std::cout << static_cast<int>(100 * progress) << "% completed\n";
+			progress = progress + 0.01f;
+		}
+	}
 }
 
 void Renderer::write(Pixel const& p) {
@@ -192,18 +250,13 @@ Color Renderer::photon_color(HitPoint const& hit_point, Scene const& scene, unsi
 	return photon_light *= hit_point.hit_material->kd * (1 - hit_point.hit_material->glossiness);
 }
 
-glm::mat4 get_normal_rotation(glm::vec3 const& normal) {
-	float pitch = acos(normal.y);
-	float yaw = atan2(normal.x, normal.z);
-	return glm::eulerAngleYX(yaw, pitch);
-}
-
 std::vector<Ray> Renderer::ray_hemisphere(glm::vec3 const& origin, glm::vec3 const& normal) const {
-	glm::mat4 rotation = get_normal_rotation(normal);
 	std::vector<Ray> rays;
 
-	for (glm::vec3 const& dir : normal_hemisphere_) {
-		rays.push_back({origin, transform_vec(dir, rotation, false)});
+	for (glm::vec3 const& dir : normal_sphere_) {
+		if (glm::dot(normal, dir) > 0) {
+			rays.push_back({origin, dir});
+		}
 	}
 	return rays;
 }

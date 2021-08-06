@@ -28,11 +28,11 @@ transform box1 translate -2 1 -2
 transform box1 rotate 35 0 0
 
 # light - from right above
-define light lamp 0 9 0 .2 .2 .2 .02
-define light lamp1 -1 9 -1 .2 .2 .2 .02
-define light lamp2 1 9 -1 .2 .2 .2 .02
-define light lamp3 1 9 1 .2 .2 .2 .02
-define light lamp4 -1 9 1 .2 .2 .2 .02
+define light lamp 0 9 0 .2 .2 .2 .05
+define light lamp1 -1 9 -1 .2 .2 .2 .05
+define light lamp2 1 9 -1 .2 .2 .2 .05
+define light lamp3 1 9 1 .2 .2 .2 .05
+define light lamp4 -1 9 1 .2 .2 .2 .05
 
 # camera
 define camera eye 60.0 0 5 13.66 0 0 0
