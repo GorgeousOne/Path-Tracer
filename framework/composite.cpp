@@ -73,13 +73,13 @@ std::ostream &Composite::print(std::ostream &os) const {
 }
 
 HitPoint Composite::intersect(Ray const& ray) const {
-	assert(nullptr != bounds_);
-	float t;
-	bool bounds_hit = bounds_->intersect(ray, t);
-
-	if (!bounds_hit) {
-		return HitPoint{};
-	}
+//	assert(nullptr != bounds_);
+//	float t;
+//	bool bounds_hit = bounds_->intersect(ray, t);
+//
+//	if (!bounds_hit) {
+//		return HitPoint{};
+//	}
 	Ray ray_inv = transform_ray(ray, world_transform_inv_);
 	float min_t = -1;
 	HitPoint min_hit {};
@@ -95,10 +95,10 @@ HitPoint Composite::intersect(Ray const& ray) const {
 			min_hit = hit;
 		}
 	}
-	if (min_hit.does_intersect) {
-		min_hit.position = transform_vec(min_hit.position, world_transform_);
-		min_hit.surface_normal = glm::normalize(transform_vec(min_hit.surface_normal, world_transform_, false));
-	}
+//	if (min_hit.does_intersect) {
+//		min_hit.position = transform_vec(min_hit.position, world_transform_);
+//		min_hit.surface_normal = glm::normalize(transform_vec(min_hit.surface_normal, world_transform_, false));
+//	}
 	return min_hit;
 }
 

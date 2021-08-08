@@ -16,20 +16,28 @@ glm::vec3 load_vec(std::istringstream& arg_stream) {
 	return v;
 }
 
+Color load_color(std::istringstream& arg_stream) {
+	Color c;
+	arg_stream >> c.r >> c.g >> c.b;
+	return c;
+}
+
 std::shared_ptr<Material> load_mat(std::istringstream& arg_stream) {
 	std::string name;
 	float brightness;
 	float glossiness;
 	float opacity;
+	float emittance;
 
 	arg_stream >> name;
-	glm::vec3 ka = load_vec(arg_stream);
-	glm::vec3 kd = load_vec(arg_stream);
-	glm::vec3 ks = load_vec(arg_stream);
+	Color ka = load_color(arg_stream);
+	Color kd = load_color(arg_stream);
+	Color ks = load_color(arg_stream);
 	arg_stream >> brightness;
 	arg_stream >> glossiness;
 	arg_stream >> opacity;
-	return std::make_shared<Material>(Material{name, ka, kd, ks, brightness, glossiness, opacity});
+	arg_stream >> emittance;
+	return std::make_shared<Material>(Material{name, ka, kd, ks, brightness, glossiness, opacity, emittance});
 }
 
 std::shared_ptr<Box> load_box(std::istringstream& arg_stream, std::map<std::string, std::shared_ptr<Material>> const& materials) {
@@ -139,11 +147,11 @@ std::map<std::string, std::shared_ptr<Material>> load_obj_materials(std::string 
 			arg_stream >> current_mat->name;
 			materials.emplace(current_mat->name, current_mat);
 		} else if ("Ka" == token) {
-			current_mat->ka = load_vec(arg_stream);
+			current_mat->ka = load_color(arg_stream);
 		} else if ("Kd" == token) {
-			current_mat->kd = load_vec(arg_stream);
+			current_mat->kd = load_color(arg_stream);
 		} else if ("Ks" == token) {
-			current_mat->ks = load_vec(arg_stream);
+			current_mat->ks = load_color(arg_stream);
 		} else if ("Ns" == token) {
 			arg_stream >> current_mat->m;
 		} else if ("illum" == token) {
