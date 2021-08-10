@@ -25,7 +25,8 @@ public:
 
 //	void render(Scene const& scene, Camera const& cam);
 	void render_threaded(Scene const &scene, Camera const &cam);
-	void thread_function(Scene const &scene, glm::mat4 const& c, float min_x, float min_y, float img_dist);
+//	void thread_function(Scene const &scene, glm::mat4 const& c, float min_x, float min_y, float img_dist);
+	void thread_function(Scene const &scene, glm::mat4 const &c, float img_dist);
 
 	void write(Pixel const& p);
 	inline std::vector<Color> const& color_buffer() const {
@@ -43,8 +44,8 @@ private:
 //	std::vector<glm::vec3> normal_sphere_;
 	std::atomic_uint pixel_index_;
 	std::atomic<float> progress;
-	std::minstd_rand gen;
-	std::uniform_real_distribution<float> dist;
+	std::minstd_rand gen_;
+	std::uniform_real_distribution<float> dist_;
 
 	Color trace(Ray const& ray, Scene const& scene, unsigned ray_bounces);
 	HitPoint get_closest_hit(Ray const& ray, Scene const& scene) const;
@@ -62,7 +63,6 @@ private:
 
 	Color bounce_color(HitPoint const &hit_point, Scene const &scene, unsigned ray_bounces);
 //	std::vector<Ray> ray_hemisphere(glm::vec3 const &origin, glm::vec3 const &normal) const;
-
 };
 
 #endif // #ifndef BUW_RENDERER_HPP

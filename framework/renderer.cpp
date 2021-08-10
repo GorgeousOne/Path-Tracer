@@ -13,14 +13,14 @@
 #include "renderer.hpp"
 
 #define PI 3.14159265f
-#define SAMPLE_RATE 4000
+#define SAMPLE_RATE 2500
 #define MAX_BOUNCES 5
 
 Renderer::Renderer(unsigned w, unsigned h, std::string const& file)
 		: width_(w), height_(h), color_buffer_(w * h, Color{0.0, 0.0, 0.0}), filename_(file), ppm_(width_, height_) {
 
-	gen = std::minstd_rand(std::random_device{}());
-	dist = std::uniform_real_distribution<float>(-1, 1);
+	gen_ = std::minstd_rand(std::random_device{}());
+	dist_ = std::uniform_real_distribution<float>(-1, 1);
 }
 
 void Renderer::render_threaded(Scene const& scene, Camera const& cam) {
@@ -46,7 +46,7 @@ void Renderer::render_threaded(Scene const& scene, Camera const& cam) {
 	threads.resize(thread_count);
 
 	for (std::thread& t : threads) {
-		t = std::thread(&Renderer::thread_function, this, scene, c, min_x, min_y, img_plane_dist);
+		t = std::thread(&Renderer::thread_function, this, scene, c, img_plane_dist);
 	}
 	for (std::thread& t : threads) {
 		t.join();
@@ -55,7 +55,7 @@ void Renderer::render_threaded(Scene const& scene, Camera const& cam) {
 	std::cout << "save " << filename_ << "\n";
 }
 
-void Renderer::thread_function(Scene const& scene, glm::mat4 const& c, float min_x, float min_y, float img_dist) {
+void Renderer::thread_function(Scene const& scene, glm::mat4 const& c,float img_dist) {
 	while(true) {
 		unsigned current_index = pixel_index_++;
 
@@ -64,16 +64,28 @@ void Renderer::thread_function(Scene const& scene, glm::mat4 const& c, float min
 		}
 		unsigned x = current_index / width_;
 		unsigned y = current_index % width_;
+		unsigned aa_samples = 2;
+		float aa_step = 1.0f / aa_samples;
+		Color aa_color{};
 
-		glm::vec3 ray_dir = glm::normalize(glm::vec3{min_x + x, min_y + y, -img_dist});
-		Ray ray = transform_ray({{}, ray_dir}, c);
-		Pixel pixel{x, y};
-		pixel.color = trace(ray, scene, 0);
-		tone_map_color(pixel.color);
+		for (int aax = 0; aax < aa_samples; ++aax) {
+			for (int aay = 0; aay < aa_samples; ++aay) {
+				glm::vec3 pixel_pos = glm::vec3{
+					width_ * -0.5f + x + aax * aa_step,
+					height_ * -0.5f + y + aay * aa_step,
+					-img_dist};
+				glm::vec4 trans_ray_dir = c * glm::vec4 {glm::normalize(pixel_pos), 0};
+				Ray ray {glm::vec3{c[3]}, glm::vec3{trans_ray_dir}};
+				aa_color += trace(ray, scene, 0);
+			}
+		}
+		aa_color *= 1.0f / aa_samples;
+		Pixel pixel {x, y};
+		pixel.color = tone_map_color(aa_color);
 		write(pixel);
 
 		if (y == 0 && x >= (progress + 0.01) * width_) {
-			std::cout << static_cast<int>(100 * progress) << "% completed\n";
+			std::cout << static_cast<int>(100 * progress) << std::endl;
 			progress = progress + 0.01f;
 		}
 	}
@@ -135,7 +147,13 @@ Color Renderer::bounce_color(HitPoint const& hit_point, Scene const& scene, unsi
 	Color bounced_light {};
 
 	for (unsigned i = 0; i < samples; ++i) {
-		glm::vec3 bounce_dir = uniform_normal(dist, gen);
+		glm::vec3 bounce_dir;
+
+		if (material->glossiness != 0) {
+			bounce_dir = glm::reflect(hit_point.ray_direction, hit_point.surface_normal);
+		}else {
+			bounce_dir = uniform_normal(dist_, gen_);
+		}
 		float cos_theta = glm::dot(hit_point.surface_normal, bounce_dir);
 
 		if (cos_theta < 0) {
@@ -143,6 +161,9 @@ Color Renderer::bounce_color(HitPoint const& hit_point, Scene const& scene, unsi
 			cos_theta *= -1;
 		}
 		bounced_light += material->emit_color + trace({hit_point.position, bounce_dir}, scene, ray_bounces + 1) * material->kd * 2 * cos_theta;
+	}
+	if (samples > 1) {
+		bounced_light *= 1.0f / samples;
 	}
 	return bounced_light;
 }
@@ -218,11 +239,6 @@ Color Renderer::bounce_color(HitPoint const& hit_point, Scene const& scene, unsi
 //	}
 //	float specular_factor = pow(cos_specular_angle, material->m);
 //	return light_intensity * material->ks * specular_factor;
-//}
-
-//Color Renderer::reflection(HitPoint const& hit_point, Scene const& scene, unsigned ray_bounces) const {
-//	glm::vec3 new_dir = glm::reflect(hit_point.ray_direction, hit_point.surface_normal);
-//	return trace(Ray{hit_point.position, new_dir}, scene, ray_bounces + 1) * hit_point.hit_material->glossiness;
 //}
 
 Color Renderer::normal_color(HitPoint const& hit_point) const {

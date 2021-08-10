@@ -28,9 +28,11 @@ void Shape::rotate(float yaw, float pitch, float roll) {
 }
 
 void Shape::translate(float x, float y, float z) {
-//	world_transform_[0][3] += x;
+//	world_transform_[0][3] += x;0
 //	world_transform_[1][3] += y;
 //	world_transform_[2][3] += z;
+	glm::mat4 transform();
+
 	world_transform_ = glm::translate(world_transform_, glm::vec3{x, y, z});
 	world_transform_inv_ = glm::inverse(world_transform_);
 }
