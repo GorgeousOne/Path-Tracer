@@ -13,19 +13,24 @@
 #include "renderer.hpp"
 
 #define PI 3.14159265f
-#define SAMPLE_RATE 2500
-#define MAX_BOUNCES 5
 
-Renderer::Renderer(unsigned w, unsigned h, std::string const& file)
-		: width_(w), height_(h), color_buffer_(w * h, Color{0.0, 0.0, 0.0}), filename_(file), ppm_(width_, height_) {
+Renderer::Renderer(unsigned w, unsigned h, std::string const& file, unsigned pixel_samples, unsigned ray_bounces, unsigned aa_samples) :
+		width_(w),
+		height_(h),
+		pixel_samples_(pixel_samples),
+		ray_bounces_(ray_bounces),
+		aa_samples_(aa_samples),
+		filename_(file),
+		ppm_(width_, height_),
+		color_buffer_(w * h, Color{}),
+		normal_buffer_(w * aa_samples, std::vector<glm::vec3>(h * aa_samples, glm::vec3{})),
+		distance_buffer_(w * aa_samples, std::vector<glm::vec3>(h * aa_samples, glm::vec3{})) {
 
 	gen_ = std::minstd_rand(std::random_device{}());
 	dist_ = std::uniform_real_distribution<float>(-1, 1);
 }
 
-void Renderer::render_threaded(Scene const& scene, Camera const& cam) {
-	pixel_index_ = 0;
-
+void Renderer::render(Scene const& scene, Camera const& cam) {
 	auto start = std::chrono::steady_clock::now();
 
 	glm::vec4 u = glm::vec4(glm::cross(cam.direction, cam.up), 0);
@@ -33,8 +38,7 @@ void Renderer::render_threaded(Scene const& scene, Camera const& cam) {
 	glm::mat4 c {u, v, glm::vec4{-cam.direction, 0}, glm::vec4{cam.position, 1}};
 
 	float img_plane_dist = (width_ / 2.0f) / tan(cam.fov_x / 2);
-	float min_x = -(width_ / 2.0f);
-	float min_y = -(height_ / 2.0f);
+	pixel_index_ = 0;
 
 	std::cout << std::fixed;
 	std::cout << std::setprecision(2);
@@ -55,7 +59,7 @@ void Renderer::render_threaded(Scene const& scene, Camera const& cam) {
 	std::cout << "save " << filename_ << "\n";
 }
 
-void Renderer::thread_function(Scene const& scene, glm::mat4 const& c,float img_dist) {
+void Renderer::thread_function(Scene const& scene, glm::mat4 const& c,float img_plane_dist) {
 	while(true) {
 		unsigned current_index = pixel_index_++;
 
@@ -64,22 +68,21 @@ void Renderer::thread_function(Scene const& scene, glm::mat4 const& c,float img_
 		}
 		unsigned x = current_index / width_;
 		unsigned y = current_index % width_;
-		unsigned aa_samples = 2;
-		float aa_step = 1.0f / aa_samples;
+		float aa_step = 1.0f / aa_samples_;
 		Color aa_color{};
 
-		for (int aax = 0; aax < aa_samples; ++aax) {
-			for (int aay = 0; aay < aa_samples; ++aay) {
+		for (int aax = 0; aax < aa_samples_; ++aax) {
+			for (int aay = 0; aay < aa_samples_; ++aay) {
 				glm::vec3 pixel_pos = glm::vec3{
 					width_ * -0.5f + x + aax * aa_step,
 					height_ * -0.5f + y + aay * aa_step,
-					-img_dist};
+					-img_plane_dist};
 				glm::vec4 trans_ray_dir = c * glm::vec4 {glm::normalize(pixel_pos), 0};
 				Ray ray {glm::vec3{c[3]}, glm::vec3{trans_ray_dir}};
-				aa_color += trace(ray, scene, 0);
+				aa_color += primary_trace(x, y, aax, aay, ray, scene);
 			}
 		}
-		aa_color *= 1.0f / aa_samples;
+		aa_color *= 1.0f / aa_samples_;
 		Pixel pixel {x, y};
 		pixel.color = tone_map_color(aa_color);
 		write(pixel);
@@ -104,6 +107,18 @@ void Renderer::write(Pixel const& p) {
 		color_buffer_[buf_pos] = p.color;
 	}
 	ppm_.write(p);
+}
+Color Renderer::primary_trace(unsigned x, unsigned y, unsigned aax, unsigned aay, Ray const& ray, Scene const& scene) {
+	HitPoint closest_hit = get_closest_hit(ray, scene);
+
+	if (closest_hit.does_intersect) {
+		unsigned pos_x = x * aa_samples_ + aax;
+		unsigned pos_y = y * aa_samples_ + aay;
+		normal_buffer_[pos_x][pos_y] = closest_hit.surface_normal;
+		distance_buffer_[pos_x][pos_y] = glm::vec3{closest_hit.distance};
+	}
+	return closest_hit.does_intersect ? bounce_color(closest_hit, scene, 0) : Color {};
+
 }
 
 Color Renderer::trace(Ray const& ray, Scene const& scene, unsigned ray_bounces) {
@@ -139,11 +154,11 @@ glm::vec3 uniform_normal(T& distribution, T2& generator) {
 
 Color Renderer::bounce_color(HitPoint const& hit_point, Scene const& scene, unsigned ray_bounces) {
 
-	if (ray_bounces >= MAX_BOUNCES) {
+	if (ray_bounces >= ray_bounces_) {
 		return {};
 	}
 	auto material = hit_point.hit_material;
-	unsigned samples = ray_bounces == 0 ? SAMPLE_RATE : 1;
+	unsigned samples = ray_bounces == 0 ? pixel_samples_ / aa_samples_ : 1;
 	Color bounced_light {};
 
 	for (unsigned i = 0; i < samples; ++i) {
@@ -168,79 +183,6 @@ Color Renderer::bounce_color(HitPoint const& hit_point, Scene const& scene, unsi
 	return bounced_light;
 }
 
-//HitPoint Renderer::find_light_block(Ray const& light_ray, float range, Scene const& scene) const {
-//	HitPoint hit = scene.root->intersect(light_ray);
-//
-//	if (hit.does_intersect && hit.distance <= range) {
-//		return hit;
-//	}
-//	return HitPoint {};
-//}
-
-//Color Renderer::shade(HitPoint const& hit_point, Scene const& scene, unsigned ray_bounces) const {
-//	Color shaded_color {};
-//
-//	if (bounce_depth > 0) {
-//		shaded_color += bounce_color(hit_point, scene, ray_bounces);
-//	}
-//	if (hit_point.hit_material->glossiness != 0 && ray_bounces > 0) {
-//		shaded_color += reflection(hit_point, scene, ray_bounces);
-//	}
-//	return tone_map_color(shaded_color);
-//}
-
-//Color Renderer::phong_color(HitPoint const& hit_point, Scene const& scene) const {
-//	auto material = hit_point.hit_material;
-//	Color phong_color{}; //= scene.ambient.intensity * material->ka;
-//	Color specular_light {};
-//
-//	for (PointLight const& light : scene.lights)  {
-//		glm::vec3 light_dir = light.position - hit_point.position;
-//		float distance = glm::length(light_dir);
-//		light_dir = glm::normalize(light_dir);
-//		Ray light_ray {hit_point.position, light_dir};
-//
-//		if (find_light_block(light_ray, distance, scene).does_intersect) {
-//			continue;
-//		}
-//		glm::vec3 normal = hit_point.surface_normal;
-//		float cos_view_angle = glm::dot(normal, light_dir);
-//
-//		//back culls specular reflection
-//		if (cos_view_angle < 0) {
-//			continue;
-//		}
-//		//adds diffuse light
-//		if (material->glossiness != 1) {
-//			phong_color += (light.intensity * material->kd * cos_view_angle);
-//		}
-//		if (material->glossiness != 0) {
-//			specular_light += specular_color(hit_point.ray_direction, light_dir, normal, light.intensity, material);
-//		}
-//	}
-//
-//	phong_color *= (1 - material->glossiness);
-//	phong_color += specular_light * material->glossiness;
-//	return phong_color;
-//}
-
-//Color Renderer::specular_color(
-//		glm::vec3 const& viewer_dir,
-//		glm::vec3 const& light_dir,
-//		glm::vec3 const& normal,
-//		Color const& light_intensity,
-//		std::shared_ptr<Material> material) const {
-//
-//	glm::vec3 reflection_dir = 2 * glm::dot(normal, light_dir) * normal - light_dir;
-//	float cos_specular_angle = glm::dot(reflection_dir, viewer_dir * -1.0f);
-//
-//	if (cos_specular_angle < 0) {
-//		return Color{};
-//	}
-//	float specular_factor = pow(cos_specular_angle, material->m);
-//	return light_intensity * material->ks * specular_factor;
-//}
-
 Color Renderer::normal_color(HitPoint const& hit_point) const {
 	return Color {
 			(hit_point.surface_normal.x + 1) / 2,
@@ -256,14 +198,14 @@ Color& Renderer::tone_map_color(Color& color) const {
 	return color;
 }
 
-float *Renderer::pixel_buffer() const {
-	auto* pixel_data = new float[width_ * height_ * 3];
-
-	for (int i = 0; i < color_buffer_.size(); ++i) {
-		Color color = color_buffer_[i];
-		pixel_data[i * 3] = color.r;
-		pixel_data[i * 3 + 1] = color.g;
-		pixel_data[i * 3 + 2] = color.b;
-	}
-	return pixel_data;
-}
+//float* Renderer::pixel_buffer() const {
+//	auto* pixel_data = new float[width_ * height_ * 3];
+//
+//	for (int i = 0; i < color_buffer_.size(); ++i) {
+//		Color color = color_buffer_[i];
+//		pixel_data[i * 3] = color.r;
+//		pixel_data[i * 3 + 1] = color.g;
+//		pixel_data[i * 3 + 2] = color.b;
+//	}
+//	return pixel_data;
+//}

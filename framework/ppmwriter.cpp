@@ -29,9 +29,7 @@ PpmWriter::PpmWriter(std::size_t w, std::size_t h)
   data_.resize(w*h*(sizeof(Color)/sizeof(float)));
 }
 
-void
-PpmWriter::write(Pixel const& p)
-{
+void PpmWriter::write(Pixel const& p) {
   //size_t buf_pos = width_* (width_-1-p.y) + p.x;
   size_t buf_pos = width_* (height_-1-p.y) + p.x;
   std::size_t pos = (sizeof(Color)/sizeof(float)) * buf_pos;
@@ -44,16 +42,12 @@ PpmWriter::write(Pixel const& p)
   }
 }
 
-void
-PpmWriter::save(std::string const& file)
-{
+void PpmWriter::save(std::string const& file) {
   file_ = file;
   save();
 }
 
-void
-PpmWriter::save()
-{
+void PpmWriter::save() {
   const std::size_t line_length = 18;
 
   std::fstream file(file_.c_str(), std::ios::out);

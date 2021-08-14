@@ -23,7 +23,7 @@ int main(int argc, char* argv[])
     if (window.get_key(GLFW_KEY_ESCAPE) == GLFW_PRESS) {
       window.close();
     }
-    window.show(renderer.color_buffer());
+    window.show(renderer.pixel_buffer());
   }
 
   return 0;
