@@ -12,7 +12,7 @@ int main(int argc, const char** argv) {
 	unsigned img_height = img_width;
 
 	Scene scene = load_scene("../../sdf/cornell-box.sdf");
-	Renderer renderer{img_width, img_height, "../../sdf/cornell-box.ppm", 100, 5, 2};
+	Renderer renderer{img_width, img_height, "../../sdf/cornell-box.ppm", 10, 5, 1};
 	std::cout << "shapes " << scene.root->child_count() << "\n";
 	std::cout << "lights " << scene.lights.size() << "\n";
 
@@ -27,12 +27,15 @@ int main(int argc, const char** argv) {
 	}
 
 	Window window{{img_width, img_height}};
+	auto buffer = renderer.color_buffer();
+//	auto buffer = renderer.normal_buffer();
+//	auto buffer = renderer.distance_buffer();
 
 	while (!window.should_close()) {
 		if (window.get_key(GLFW_KEY_ESCAPE) == GLFW_PRESS) {
 			window.close();
 		}
-		window.show(renderer.color_buffer());
+		window.show(buffer);
 	}
 	return 0;
 }

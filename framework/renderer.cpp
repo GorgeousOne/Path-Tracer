@@ -11,6 +11,7 @@
 #include <iomanip>
 #include <thread>
 #include "renderer.hpp"
+#include "kernel3.hpp"
 
 #define PI 3.14159265f
 
@@ -22,9 +23,9 @@ Renderer::Renderer(unsigned w, unsigned h, std::string const& file, unsigned pix
 		aa_samples_(aa_samples),
 		filename_(file),
 		ppm_(width_, height_),
-		color_buffer_(w * h, Color{}),
-		normal_buffer_(w * aa_samples, std::vector<glm::vec3>(h * aa_samples, glm::vec3{})),
-		distance_buffer_(w * aa_samples, std::vector<glm::vec3>(h * aa_samples, glm::vec3{})) {
+		color_buffer_(h * aa_samples, std::vector<Color>(w * aa_samples, Color{})),
+		normal_buffer_(h * aa_samples, std::vector<Color>(w * aa_samples, Color{0.5, 0.5, 0.5})),
+		distance_buffer_(h * aa_samples, std::vector<Color>(w * aa_samples, Color{1, 1, 1})) {
 
 	gen_ = std::minstd_rand(std::random_device{}());
 	dist_ = std::uniform_real_distribution<float>(-1, 1);
@@ -55,6 +56,7 @@ void Renderer::render(Scene const& scene, Camera const& cam) {
 	for (std::thread& t : threads) {
 		t.join();
 	}
+	denoise();
 	ppm_.save(filename_);
 	std::cout << "save " << filename_ << "\n";
 }
@@ -96,34 +98,42 @@ void Renderer::thread_function(Scene const& scene, glm::mat4 const& c,float img_
 
 void Renderer::write(Pixel const& p) {
 	// flip pixels, because of opengl glDrawPixels
-	size_t buf_pos = (width_ * p.y + p.x);
-
-	if (buf_pos >= color_buffer_.size() || (int) buf_pos < 0) {
+	if (p.y < 0 || p.y >= color_buffer_.size() ||
+		p.x < 0 || p.x >= color_buffer_[0].size()) {
 		std::cerr << "Fatal Error Renderer::write(Pixel p) : "
 		          << "pixel out of ppm_ : "
-		          << (int) p.x << "," << (int) p.y
+		          << (int) p.x << ", " << (int) p.y
 		          << std::endl;
 	} else {
-		color_buffer_[buf_pos] = p.color;
+		color_buffer_[p.y][p.x] = p.color;
 	}
 	ppm_.write(p);
 }
+
+void Renderer::denoise() {
+	pixel_buffer result(height_ * aa_samples_, std::vector<Color>(width_ * aa_samples_));
+
+	glm::mat3 gaussian_blur = gaussian();
+	apply_kernel(gaussian_blur, color_buffer_, result);
+	color_buffer_ = result;
+}
+
 Color Renderer::primary_trace(unsigned x, unsigned y, unsigned aax, unsigned aay, Ray const& ray, Scene const& scene) {
 	HitPoint closest_hit = get_closest_hit(ray, scene);
+	unsigned pos_x = x * aa_samples_ + aax;
+	unsigned pos_y = y * aa_samples_ + aay;
 
-	if (closest_hit.does_intersect) {
-		unsigned pos_x = x * aa_samples_ + aax;
-		unsigned pos_y = y * aa_samples_ + aay;
-		normal_buffer_[pos_x][pos_y] = closest_hit.surface_normal;
-		distance_buffer_[pos_x][pos_y] = glm::vec3{closest_hit.distance};
+	if (!closest_hit.does_intersect) {
+		return Color{};
 	}
-	return closest_hit.does_intersect ? bounce_color(closest_hit, scene, 0) : Color {};
-
+	normal_buffer_[pos_y][pos_x] = Color::vec_color(closest_hit.surface_normal);
+	distance_buffer_[pos_y][pos_x] = Color::gray_color(closest_hit.distance);
+	return bounce_color(closest_hit, scene, pixel_samples_ / (aa_samples_ * aa_samples_), 0);
 }
 
 Color Renderer::trace(Ray const& ray, Scene const& scene, unsigned ray_bounces) {
 	HitPoint closest_hit = get_closest_hit(ray, scene);
-	return closest_hit.does_intersect ? bounce_color(closest_hit, scene, ray_bounces) : Color {};
+	return closest_hit.does_intersect ? bounce_color(closest_hit, scene, 1, ray_bounces) : Color {};
 }
 
 HitPoint Renderer::get_closest_hit(Ray const& ray, Scene const& scene) const {
@@ -152,13 +162,11 @@ glm::vec3 uniform_normal(T& distribution, T2& generator) {
 	};
 }
 
-Color Renderer::bounce_color(HitPoint const& hit_point, Scene const& scene, unsigned ray_bounces) {
-
+Color Renderer::bounce_color(HitPoint const& hit_point, Scene const& scene, unsigned samples, unsigned ray_bounces) {
 	if (ray_bounces >= ray_bounces_) {
 		return {};
 	}
 	auto material = hit_point.hit_material;
-	unsigned samples = ray_bounces == 0 ? pixel_samples_ / aa_samples_ : 1;
 	Color bounced_light {};
 
 	for (unsigned i = 0; i < samples; ++i) {
@@ -197,15 +205,3 @@ Color& Renderer::tone_map_color(Color& color) const {
 	color.b /= color.b + 1;
 	return color;
 }
-
-//float* Renderer::pixel_buffer() const {
-//	auto* pixel_data = new float[width_ * height_ * 3];
-//
-//	for (int i = 0; i < color_buffer_.size(); ++i) {
-//		Color color = color_buffer_[i];
-//		pixel_data[i * 3] = color.r;
-//		pixel_data[i * 3 + 1] = color.g;
-//		pixel_data[i * 3 + 2] = color.b;
-//	}
-//	return pixel_data;
-//}

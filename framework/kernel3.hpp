@@ -5,11 +5,13 @@
 #include <glm/glm.hpp>
 #include <vector>
 #include <functional>
+#include "color.hpp"
 
-using pixel_buffer = std::vector<std::vector<glm::vec3>>;
+using pixel_buffer = std::vector<std::vector<Color>>;
 
 glm::mat3 gaussian();
-void apply(glm::mat3 const& kernel, int x, int y, pixel_buffer src, pixel_buffer dest);
-void adjust(glm::mat3 &kernel, int x, int y, std::vector<std::vector<glm::vec3>> const& image, const std::function<float(glm::vec3, glm::vec3)>& lambda);
+glm::mat3 adjust(glm::mat3 const& kernel, int y, int x, pixel_buffer const& image, const std::function<float(glm::vec3, glm::vec3)>& lambda);
+void apply_kernel(glm::mat3 const& kernel, pixel_buffer const& src, pixel_buffer &dest);
+void apply_kernel(glm::mat3 const& kernel, int y, int x, pixel_buffer const& src, pixel_buffer &dest);
 
 #endif //RAYTRACER_KERNEL3_HPP

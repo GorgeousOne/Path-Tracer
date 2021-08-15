@@ -27,6 +27,13 @@ struct Color {
 		return *this;
 	}
 
+	Color &operator+=(float constant) {
+		r += constant;
+		g += constant;
+		b += constant;
+		return *this;
+	}
+
 	Color &operator-=(Color const& other) {
 		r -= other.r;
 		g -= other.g;
@@ -74,6 +81,23 @@ struct Color {
 	float r = 0;
 	float g = 0;
 	float b = 0;
+
+	static Color vec_color(glm::vec3 const& vec) {
+		return Color{vec.x, vec.y, vec.z};
+	}
+
+//	static Color normal_color(glm::vec3 const& n) {
+//		return Color{
+//				(n.x + 1) / 2,
+//				(n.y + 1) / 2,
+//				(n.z + 1) / 2};
+//	}
+
+	static Color gray_color(float distance) {
+		float brightness = (distance - 10) / (distance);
+		return Color{brightness, brightness, brightness};
+	}
+
 };
 
 #endif //#define BUW_COLOR_HPP
