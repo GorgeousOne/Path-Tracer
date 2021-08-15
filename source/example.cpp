@@ -12,7 +12,7 @@ int main(int argc, const char** argv) {
 	unsigned img_height = img_width;
 
 	Scene scene = load_scene("../../sdf/cornell-box.sdf");
-	Renderer renderer{img_width, img_height, "../../sdf/cornell-box.ppm", 10, 5, 1};
+	Renderer renderer{img_width, img_height, "../../sdf/cornell-box.ppm", 1000, 5, 2};
 	std::cout << "shapes " << scene.root->child_count() << "\n";
 	std::cout << "lights " << scene.lights.size() << "\n";
 

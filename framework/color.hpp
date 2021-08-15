@@ -82,16 +82,13 @@ struct Color {
 	float g = 0;
 	float b = 0;
 
-	static Color vec_color(glm::vec3 const& vec) {
-		return Color{vec.x, vec.y, vec.z};
+	static Color to_color(glm::vec3 const& v) {
+		return Color{v.x, v.y, v.z};
 	}
 
-//	static Color normal_color(glm::vec3 const& n) {
-//		return Color{
-//				(n.x + 1) / 2,
-//				(n.y + 1) / 2,
-//				(n.z + 1) / 2};
-//	}
+	static glm::vec3 to_vec(Color const& c) {
+		return glm::vec3{c.r, c.g, c.b};
+	}
 
 	static Color gray_color(float distance) {
 		float brightness = (distance - 10) / (distance);
