@@ -16,16 +16,17 @@
 #define PI 3.14159265f
 
 Renderer::Renderer(unsigned w, unsigned h, std::string const& file, unsigned pixel_samples, unsigned ray_bounces, unsigned aa_samples) :
-		width_(w),
-		height_(h),
+		width_(w * aa_samples),
+		height_(h * aa_samples),
 		pixel_samples_(pixel_samples),
 		ray_bounces_(ray_bounces),
 		aa_samples_(aa_samples),
 		filename_(file),
-		ppm_(width_, height_),
-		color_buffer_(h * aa_samples, std::vector<Color>(w * aa_samples, Color{})),
-		normal_buffer_(h * aa_samples, std::vector<Color>(w * aa_samples, Color{0.5, 0.5, 0.5})),
-		distance_buffer_(h * aa_samples, std::vector<Color>(w * aa_samples, Color{1, 1, 1})) {
+		ppm_(w, h),
+		color_buffer_(height_, std::vector<Color>(width_, Color{})),
+		normal_buffer_(height_, std::vector<glm::vec3>(width_, glm::vec3{0.5})),
+		distance_buffer_(height_, std::vector<float>(width_, 1)),
+		material_buffer_(height_, std::vector<std::shared_ptr<Material>>(width_, nullptr)) {
 
 	gen_ = std::minstd_rand(std::random_device{}());
 	dist_ = std::uniform_real_distribution<float>(-1, 1);
@@ -36,7 +37,7 @@ void Renderer::render(Scene const& scene, Camera const& cam) {
 
 	glm::vec4 u = glm::vec4(glm::cross(cam.direction, cam.up), 0);
 	glm::vec4 v = glm::vec4(glm::cross({u.x, u.y, u.z}, cam.direction), 0);
-	glm::mat4 c {u, v, glm::vec4{-cam.direction, 0}, glm::vec4{cam.position, 1}};
+	glm::mat4 cam_mat {u, v, glm::vec4{-cam.direction, 0}, glm::vec4{cam.position, 1}};
 
 	float img_plane_dist = (width_ / 2.0f) / tan(cam.fov_x / 2);
 	pixel_index_ = 0;
@@ -51,43 +52,33 @@ void Renderer::render(Scene const& scene, Camera const& cam) {
 	threads.resize(thread_count);
 
 	for (std::thread& t : threads) {
-		t = std::thread(&Renderer::thread_function, this, scene, c, img_plane_dist);
+		t = std::thread(&Renderer::thread_function, this, scene, cam_mat, img_plane_dist);
 	}
 	for (std::thread& t : threads) {
 		t.join();
 	}
 	denoise();
-	ppm_.save(filename_);
-	std::cout << "save " << filename_ << "\n";
+	denoise();
+	denoise();
 }
 
-void Renderer::thread_function(Scene const& scene, glm::mat4 const& c,float img_plane_dist) {
+void Renderer::thread_function(Scene const& scene, glm::mat4 const& cam_mat, float img_plane_dist) {
 	while(true) {
 		unsigned current_index = pixel_index_++;
+		unsigned x = current_index / width_;
+		unsigned y = current_index % width_;
 
 		if (current_index >= width_ * height_) {
 			return;
 		}
-		unsigned x = current_index / width_;
-		unsigned y = current_index % width_;
-		float aa_step = 1.0f / aa_samples_;
-		Color aa_color{};
+		glm::vec3 pixel_pos = glm::vec3{
+			width_ * -0.5f + x,
+			height_ * -0.5f + y,
+			-img_plane_dist};
 
-		for (int aax = 0; aax < aa_samples_; ++aax) {
-			for (int aay = 0; aay < aa_samples_; ++aay) {
-				glm::vec3 pixel_pos = glm::vec3{
-					width_ * -0.5f + x + aax * aa_step,
-					height_ * -0.5f + y + aay * aa_step,
-					-img_plane_dist};
-				glm::vec4 trans_ray_dir = c * glm::vec4 {glm::normalize(pixel_pos), 0};
-				Ray ray {glm::vec3{c[3]}, glm::vec3{trans_ray_dir}};
-				aa_color += primary_trace(x, y, aax, aay, ray, scene);
-			}
-		}
-		aa_color *= 1.0f / aa_samples_;
-		Pixel pixel {x, y};
-		pixel.color = tone_map_color(aa_color);
-		write(pixel);
+		glm::vec4 trans_ray_dir = cam_mat * glm::vec4 {glm::normalize(pixel_pos), 0};
+		Ray ray {glm::vec3{cam_mat[3]}, glm::vec3{trans_ray_dir}};
+		color_buffer_[y][x] = tone_map_color(primary_trace(y, x, ray, scene));
 
 		if (y == 0 && x >= (progress + 0.01) * width_) {
 			std::cout << static_cast<int>(100 * progress) << std::endl;
@@ -96,38 +87,41 @@ void Renderer::thread_function(Scene const& scene, glm::mat4 const& c,float img_
 	}
 }
 
-void Renderer::write(Pixel const& p) {
-	// flip pixels, because of opengl glDrawPixels
-	if (p.y < 0 || p.y >= color_buffer_.size() ||
-		p.x < 0 || p.x >= color_buffer_[0].size()) {
-		std::cerr << "Fatal Error Renderer::write(Pixel p) : "
-		          << "pixel out of ppm_ : "
-		          << (int) p.x << ", " << (int) p.y
-		          << std::endl;
-	} else {
-		color_buffer_[p.y][p.x] = p.color;
-	}
-	ppm_.write(p);
-}
-
 void Renderer::denoise() {
-	pixel_buffer result(height_ * aa_samples_, std::vector<Color>(width_ * aa_samples_));
+	vector2d<Color> result(height_, std::vector<Color>(width_));
 
-	glm::mat3 gaussian_blur = gaussian();
-	apply_kernel(gaussian_blur, color_buffer_, result);
+	auto normal_adjustment = [](glm::vec3 const& center, glm::vec3 const& relative) {
+		float dot = glm::dot(center, relative);
+		return fmax(0, dot);
+	};
+	auto distance_adjustment = [](float center, float relative) {
+		return 1 - abs(relative - center);
+	};
+	auto material_adjustment = [](std::shared_ptr<Material> center, std::shared_ptr<Material> relative) {
+		return relative == center;
+	};
+
+	for (unsigned y = 0; y < color_buffer_.size(); ++y) {
+		for (unsigned x = 0; x < color_buffer_.size(); ++x) {
+			glm::mat3 gaussian = gaussian_blur();
+			adjust_kernel<glm::vec3>(gaussian, y, x, normal_buffer_, normal_adjustment);
+			adjust_kernel<float>(gaussian, y, x, distance_buffer_, distance_adjustment);
+			adjust_kernel<std::shared_ptr<Material>>(gaussian, y, x, material_buffer_, material_adjustment);
+			apply_kernel(gaussian, y, x, color_buffer_, result);
+		}
+	}
 	color_buffer_ = result;
 }
 
-Color Renderer::primary_trace(unsigned x, unsigned y, unsigned aax, unsigned aay, Ray const& ray, Scene const& scene) {
+Color Renderer::primary_trace(unsigned y, unsigned x, Ray const& ray, Scene const& scene) {
 	HitPoint closest_hit = get_closest_hit(ray, scene);
-	unsigned pos_x = x * aa_samples_ + aax;
-	unsigned pos_y = y * aa_samples_ + aay;
 
 	if (!closest_hit.does_intersect) {
 		return Color{};
 	}
-	normal_buffer_[pos_y][pos_x] = Color::vec_color(closest_hit.surface_normal);
-	distance_buffer_[pos_y][pos_x] = Color::gray_color(closest_hit.distance);
+	normal_buffer_[y][x] = closest_hit.surface_normal;
+	distance_buffer_[y][x] = closest_hit.distance;
+	material_buffer_[y][x] = closest_hit.hit_material;
 	return bounce_color(closest_hit, scene, pixel_samples_ / (aa_samples_ * aa_samples_), 0);
 }
 
@@ -191,15 +185,7 @@ Color Renderer::bounce_color(HitPoint const& hit_point, Scene const& scene, unsi
 	return bounced_light;
 }
 
-Color Renderer::normal_color(HitPoint const& hit_point) const {
-	return Color {
-			(hit_point.surface_normal.x + 1) / 2,
-			(hit_point.surface_normal.y + 1) / 2,
-			(hit_point.surface_normal.z + 1) / 2
-	};
-}
-
-Color& Renderer::tone_map_color(Color& color) const {
+Color Renderer::tone_map_color(Color color) const {
 	color.r /= color.r + 1;
 	color.g /= color.g + 1;
 	color.b /= color.b + 1;
