@@ -15,18 +15,10 @@
 #include <cmath>
 #include <algorithm>
 
-PpmWriter::PpmWriter(std::size_t w, std::size_t h, std::string const& file)
-  : file_(file),
-    width_(w),
+PpmWriter::PpmWriter(std::size_t w, std::size_t h)
+  : width_(w),
     height_(h) {
   data_.resize(w * h * (sizeof(Color)/sizeof(float)));
-}
-
-PpmWriter::PpmWriter(std::size_t w, std::size_t h)
-  : file_("untitled.ppm"),
-    width_(w),
-    height_(h) {
-  data_.resize(w*h*(sizeof(Color)/sizeof(float)));
 }
 
 void PpmWriter::write(Pixel const& p) {
@@ -42,15 +34,10 @@ void PpmWriter::write(Pixel const& p) {
   }
 }
 
-void PpmWriter::save(std::string const& file) {
-  file_ = file;
-  save();
-}
-
-void PpmWriter::save() {
+void PpmWriter::save(std::string const& file_path) {
   const std::size_t line_length = 18;
 
-  std::fstream file(file_.c_str(), std::ios::out);
+  std::fstream file((file_path + ".ppm").c_str(), std::ios::out);
   file.clear();
   file << "P3 "
        << (unsigned int)width_ << " "
@@ -67,4 +54,5 @@ void PpmWriter::save() {
     }
 
   file.close();
+  std::cout << "save " << file_path << std::endl;
 }

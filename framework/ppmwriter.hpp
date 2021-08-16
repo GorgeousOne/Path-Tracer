@@ -20,16 +20,13 @@
 class PpmWriter
 {
 public:
-  PpmWriter(std::size_t w, std::size_t h, std::string const& file);
   PpmWriter(std::size_t w, std::size_t h);
 
 public:
   void write(Pixel const& p);
-  void save(std::string const& file);
-  void save();
+  void save(std::string const& file_path);
 
 private:
-  std::string file_;
   std::vector<unsigned int> data_;
   size_t width_;
   size_t height_;

@@ -24,12 +24,10 @@ public:
 	template<typename T>
 	using vector2d = std::vector<std::vector<T>>;
 
-	Renderer(unsigned w, unsigned h, std::string const& file, unsigned pixel_samples, unsigned ray_bounces, unsigned aa_samples);
+	Renderer(unsigned w, unsigned h, std::string const& file, unsigned pixel_samples, unsigned aa_samples, unsigned ray_bounces);
 
-	void render(Scene const &scene, Camera const &cam);
+	void render(Scene const &scene);
 	void thread_function(Scene const &scene, glm::mat4 const &cam_mat, float img_plane_dist);
-
-	void write(Pixel const& p);
 
 	template<typename T>
 	std::vector<T> concat_buffer(vector2d<T> const& buffer2d) const {
@@ -64,8 +62,6 @@ public:
 				ppm_.write(p);
 			}
 		}
-		ppm_.save(filename_);
-		std::cout << "save " << filename_ << "\n";
 		return buffer1d;
 	}
 
@@ -95,8 +91,8 @@ private:
 	unsigned width_;
 	unsigned height_;
 	unsigned pixel_samples_;
-	unsigned ray_bounces_;
 	unsigned aa_samples_;
+	unsigned ray_bounces_;
 	std::string filename_;
 	PpmWriter ppm_;
 

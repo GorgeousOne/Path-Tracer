@@ -5,6 +5,7 @@
 
 #include "scene.hpp"
 #include "sphere.hpp"
+#include "renderer.hpp"
 
 std::shared_ptr<Material> Scene::find_mat(std::string const& name) const {
 	return materials.find(name)->second;
@@ -278,25 +279,9 @@ std::shared_ptr<Composite> load_obj(std::string const& directory_path, std::stri
 		current_child->build_octree();
 		composite->add_child(current_child);
 	}
-//	composite->translate(0, -5, -12);
-//	composite->rotate(1.5, 0, 0);
 	composite->build_octree();
 	return composite;
 };
-
-void render(std::istringstream& arg_stream) {
-	std::string cam_name;
-	std::string file_name;
-	unsigned int res_x;
-	unsigned int res_y;
-
-	arg_stream >> cam_name;
-	arg_stream >> file_name;
-	arg_stream >> res_x;
-	arg_stream >> res_y;
-
-	//NOT IMPLEMENTED FOR THIS ASSIGNMENT
-}
 
 void add_to_scene(std::istringstream& arg_stream, Scene& scene) {
 	std::string token;
@@ -362,6 +347,25 @@ void transform(std::istringstream& arg_stream, Scene& scene) {
 	}
 }
 
+void render(std::istringstream& arg_stream, Scene const& scene) {
+	std::string file_name;
+	unsigned res_x;
+	unsigned res_y;
+	unsigned pixel_samples;
+	unsigned aa_samples;
+	unsigned ray_bounces;
+
+	arg_stream >> file_name;
+	arg_stream >> res_x;
+	arg_stream >> res_y;
+	arg_stream >> pixel_samples;
+	arg_stream >> aa_samples;
+	arg_stream >> ray_bounces;
+
+	Renderer renderer {res_x, res_y, file_name, pixel_samples, aa_samples, ray_bounces};
+	renderer.render(scene);
+}
+
 Scene load_scene(std::string const& file_path) {
 	Scene scene{};
 	std::ifstream input_sdf_file(file_path);
@@ -380,7 +384,7 @@ Scene load_scene(std::string const& file_path) {
 		if ("define" == token_str) {
 			add_to_scene(arg_stream, scene);
 		} else if ("render" == token_str) {
-			render(arg_stream);
+			render(arg_stream, scene);
 		} else if ("transform" == token_str) {
 			transform(arg_stream, scene);
 		}

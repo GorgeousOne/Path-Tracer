@@ -15,12 +15,12 @@
 
 #define PI 3.14159265f
 
-Renderer::Renderer(unsigned w, unsigned h, std::string const& file, unsigned pixel_samples, unsigned ray_bounces, unsigned aa_samples) :
+Renderer::Renderer(unsigned w, unsigned h, std::string const& file, unsigned pixel_samples, unsigned aa_samples, unsigned ray_bounces) :
 		width_(w * aa_samples),
 		height_(h * aa_samples),
 		pixel_samples_(pixel_samples),
-		ray_bounces_(ray_bounces),
 		aa_samples_(aa_samples),
+		ray_bounces_(ray_bounces),
 		filename_(file),
 		ppm_(w, h),
 		color_buffer_(height_, std::vector<Color>(width_, Color{})),
@@ -32,8 +32,12 @@ Renderer::Renderer(unsigned w, unsigned h, std::string const& file, unsigned pix
 	dist_ = std::uniform_real_distribution<float>(-1, 1);
 }
 
-void Renderer::render(Scene const& scene, Camera const& cam) {
+void Renderer::render(Scene const& scene) {
 	auto start = std::chrono::steady_clock::now();
+	Camera cam = scene.camera;
+
+	std::cout << "shapes " << scene.root->child_count() << "\n";
+	std::cout << "lights " << scene.lights.size() << "\n";
 
 	glm::vec4 u = glm::vec4(glm::cross(cam.direction, cam.up), 0);
 	glm::vec4 v = glm::vec4(glm::cross({u.x, u.y, u.z}, cam.direction), 0);
@@ -57,9 +61,13 @@ void Renderer::render(Scene const& scene, Camera const& cam) {
 	for (std::thread& t : threads) {
 		t.join();
 	}
+	color_buffer();
+	ppm_.save(filename_ + "-noisy");
 	denoise();
 	denoise();
 	denoise();
+	color_buffer();
+	ppm_.save(filename_);
 }
 
 void Renderer::thread_function(Scene const& scene, glm::mat4 const& cam_mat, float img_plane_dist) {
@@ -95,7 +103,7 @@ void Renderer::denoise() {
 		return fmax(0, dot);
 	};
 	auto distance_adjustment = [](float center, float relative) {
-		return 1 - abs(relative - center);
+		return fmax(0, fmin(1, 1 - abs(relative - center)));
 	};
 	auto material_adjustment = [](std::shared_ptr<Material> center, std::shared_ptr<Material> relative) {
 		return relative == center;

@@ -26,8 +26,8 @@ transform back translate -5 0 -6
 transform front translate -5 0 15
 transform lamp translate -2 9.99 -2
 
-define shape sphere ball1 0 1.5 0 1.5 gray
-define shape box box1 -1.5 0 -1.5 1.5 5.8 1.5 gray
+define shape sphere ball1 0 1.5 0 1.5 white
+define shape box box1 -1.5 0 -1.5 1.5 5.8 1.5 white
 
 transform ball1 translate 1.5 0 2
 transform box1 translate -1.5 0 -1
@@ -41,3 +41,5 @@ transform box1 rotate 35 0 0
 
 # camera
 define camera eye 60.0 0 5 13.66 0 0 0
+
+# render ../../sdf/cornell 400 400 2500 2 5
