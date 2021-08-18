@@ -21,7 +21,7 @@ std::shared_ptr<Material> load_mat(std::istringstream& arg_stream) {
 	float brightness;
 	float glossiness;
 	float opacity;
-	float density;
+	float ior;
 
 	arg_stream >> name;
 	glm::vec3 ka = load_vec(arg_stream);
@@ -30,8 +30,8 @@ std::shared_ptr<Material> load_mat(std::istringstream& arg_stream) {
 	arg_stream >> brightness;
 	arg_stream >> glossiness;
 	arg_stream >> opacity;
-	arg_stream >> density;
-	return std::make_shared<Material>(Material{name, ka, kd, ks, brightness, glossiness, opacity, density});
+	arg_stream >> ior;
+	return std::make_shared<Material>(Material{name, ka, kd, ks, brightness, glossiness, opacity, ior});
 }
 
 std::shared_ptr<Box> load_box(std::istringstream& arg_stream, std::map<std::string, std::shared_ptr<Material>> const& materials) {
@@ -166,7 +166,7 @@ std::shared_ptr<Triangle> load_obj_face(
 		std::istringstream& arg_stream,
 		std::vector<glm::vec3> const& vertices,
 		std::vector<glm::vec3> const& normals,
-		std::string name,
+		std::string const& name,
 		std::shared_ptr<Material> mat) {
 	unsigned indices_v[3];
 	unsigned indices_vt[3];

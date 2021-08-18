@@ -11,7 +11,7 @@ int main(int argc, const char** argv) {
 	unsigned img_width = 800;
 	unsigned img_height = img_width;
 
-	Scene scene = load_scene("../../sdf/example.sdf");
+	Scene scene = load_scene("../../sdf/cornell.sdf");
 	Renderer renderer{img_width, img_height, "../../sdf/img.ppm", 5};
 	std::cout << "shapes " << scene.root->child_count() << "\n";
 	std::cout << "lights " << scene.lights.size() << "\n";
