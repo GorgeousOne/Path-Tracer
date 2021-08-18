@@ -118,7 +118,7 @@ Camera load_camera(std::istringstream& arg_stream) {
 	arg_stream >> roll;
 
 	glm::mat4 cam_rotation = glm::eulerAngleYXZ(glm::radians(yaw), glm::radians(pitch), glm::radians(roll));
-	return {name, glm::radians(fov_x), position, transform_vec({0, 0, -1}, cam_rotation, false), transform_vec({0, 1, 0}, cam_rotation, false)};
+	return {name, fov_x, position, transform_vec({0, 0, -1}, cam_rotation, false), transform_vec({0, 1, 0}, cam_rotation, false)};
 }
 
 std::map<std::string, std::shared_ptr<Material>> load_obj_materials(std::string const& file_path) {

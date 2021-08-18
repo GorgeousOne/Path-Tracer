@@ -18,7 +18,7 @@ int main(int argc, const char** argv) {
 
 	try {
 		auto start = std::chrono::steady_clock::now();
-		renderer.render(scene, scene.camera);
+		renderer.render(scene);
 		auto end = std::chrono::steady_clock::now();
 		std::chrono::duration<double> elapsed_seconds = end-start;
 		std::cout << elapsed_seconds.count() << "s\n";

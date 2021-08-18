@@ -12,6 +12,8 @@
 
 #include <string>
 #include <glm/glm.hpp>
+#include <atomic>
+#include <thread>
 #include "color.hpp"
 #include "pixel.hpp"
 #include "ppmwriter.hpp"
@@ -21,7 +23,7 @@ class Renderer {
 public:
 	Renderer(unsigned w, unsigned h, std::string const& file, unsigned max_ray_bounces);
 
-	void render(Scene const& scene, Camera const& cam);
+	void render(Scene const& scene);
 	void write(Pixel const& p);
 
 	inline std::vector<Color> const& color_buffer() const {
@@ -37,6 +39,9 @@ private:
 	PpmWriter ppm_;
 	unsigned max_ray_bounces_;
 
+	std::atomic_uint pixel_index_;
+	void thread_function(Scene const& scene, float img_plane_dist, glm::mat4 const& trans_mat);
+
 	Color trace(Ray const& ray, Scene const& scene, unsigned ray_bounces = 0) const;
 	HitPoint find_light_block(Ray const& light_ray, float range, Scene const& scene) const;
 
@@ -46,7 +51,7 @@ private:
 	                     Color const& light_intensity, std::shared_ptr<Material> material) const;
 
 	Color normal_color(HitPoint const& hitPoint) const;
-	Color& tone_map_color(Color &color) const;
+	Color tone_map_color(Color color) const;
 
 	Color reflection(HitPoint const& hitPoint, Scene const& scene, unsigned bounces) const;
 
