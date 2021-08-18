@@ -167,31 +167,26 @@ Color Renderer::reflection(HitPoint const& hit_point, Scene const& scene, unsign
 Color Renderer::refraction(HitPoint const& hit_point, Scene const& scene, unsigned ray_bounces) const {
 	glm::vec3 ray_dir = hit_point.ray_direction;
 	glm::vec3 normal = hit_point.surface_normal;
-
+	float eta = 1 / hit_point.hit_material->density;
 	float cos_incoming = -glm::dot(normal, ray_dir);
 
-	float new_density = hit_point.hit_material->density;
-	float eta;
-	int sign = (cos_incoming > 0) - (cos_incoming < 0);
-	if (cos_incoming > 0) {
-		eta = 1 / new_density;
-	}else {
-		eta = new_density;
+	//inverts negative incoming angle and normal vector if surface is hit from behind
+	if (cos_incoming < 0) {
+		eta = 1 / eta;
 		cos_incoming *= -1;
-		normal *= -1.0f;
+		normal *= -1;
 	}
+//	glm::vec3 new_dir = glm::refract(ray_dir, normal, eta);
+	float cos_outgoing_squared = 1 - eta * eta * (1 - cos_incoming * cos_incoming);
 
-
-
-
-//	glm::vec3 new_dir = ray_dir;
-	glm::vec3 new_dir = glm::refract(ray_dir, normal, eta);
-//	glm::vec3 new_dir = ray_dir;
-//	std::cout << ray_dir << " reftacted to" << new_dir << "\n";
-
-	Ray new_ray {hit_point.position - hit_point.surface_normal * (sign * 2 * EPSILON), glm::normalize(new_dir)};
-
-	return trace(new_ray, scene, ray_bounces + 1) * (1 - hit_point.hit_material->opacity);
+	//returns total reflection if critical angle is reached
+	if (cos_outgoing_squared < 0) {
+		return reflection(hit_point, scene, ray_bounces);
+	}else {
+		glm::vec3 new_dir = ray_dir * eta + normal * (eta * cos_incoming - sqrtf(cos_outgoing_squared));
+		Ray new_ray {hit_point.position - normal * (2 * EPSILON), new_dir};
+		return trace(new_ray, scene, ray_bounces + 1) * (1 - hit_point.hit_material->opacity);
+	}
 }
 
 Color Renderer::normal_color(HitPoint const& hit_point) const {

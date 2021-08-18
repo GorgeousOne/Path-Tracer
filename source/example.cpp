@@ -8,7 +8,7 @@
 #include "renderer.hpp"
 
 int main(int argc, const char** argv) {
-	unsigned img_width = 1000;
+	unsigned img_width = 800;
 	unsigned img_height = img_width;
 
 	Scene scene = load_scene("../../sdf/example.sdf");
