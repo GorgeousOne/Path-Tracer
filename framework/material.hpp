@@ -20,6 +20,8 @@ struct Material {
 	float glossiness = 0;
 
 	float opacity = 1;
+
+	float density = 1;
 };
 
 std::ostream& operator<<(std::ostream& os, Material const& mat);

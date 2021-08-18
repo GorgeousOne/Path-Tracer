@@ -1,16 +1,16 @@
 # materials
 define ambient amb 1 1 1 1
-define material red 1 0 0 1 0 0 1 0 0 20 0 1
-define material green 0 1 0 0 1 0 0 1 0 10 0 1
-define material blue 0 0 1 0 0 1 1 0.9 0.6 500 0.2 1
-define material blue2 0 0 1 0 0 1 1 0.9 0.6 500 0.8 1
-define material yellow 1 1 0 1 1 0 1 1 0 10 0 1
+define material red 1 0 0 1 0 0 1 0 0 20 0 1 1
+define material green 0 1 0 0 1 0 0 1 0 10 0 1 1
+define material glass 0 0 1 0 0 1 1 0.9 0.6 500 0 0.1 1.4
+define material blue 0 0 1 0 0 1 1 0.9 0.6 500 0.8 1 1
+define material yellow 1 1 0 1 1 0 1 1 0 10 0 1 1
 
 # geometry
 define shape box red_box 0 0 0 2 2 2 red
 define shape box green_box -5 -10 -20 5 -5 -10 green
-define shape sphere blue_sphere 0 0 0 1 blue
-define shape sphere blue_sphere2 0 0 0 1 blue2
+define shape sphere blue_sphere 0 0 0 2 glass
+define shape sphere blue_sphere2 0 0 0 1 blue
 define shape triangle face -2 -3 -11 1 -3 -11 -0.5 -2 -13 yellow
 define shape obj superhot
 
@@ -19,7 +19,8 @@ define light sun -5 20 0 .2 .2 .2 32
 # define light sun2 3 20 10 .2 .2 .2 16
 
 transform red_box translate 2 1 -12
-transform blue_sphere translate 2.5 -1 -12
+transform blue_sphere translate 0 0 -5
+# transform blue_sphere translate scale
 transform blue_sphere2 translate -3 0 -12
 transform blue_sphere2 scale 1.5
 transform face translate 1 0 0

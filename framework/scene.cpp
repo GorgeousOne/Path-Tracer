@@ -21,6 +21,7 @@ std::shared_ptr<Material> load_mat(std::istringstream& arg_stream) {
 	float brightness;
 	float glossiness;
 	float opacity;
+	float density;
 
 	arg_stream >> name;
 	glm::vec3 ka = load_vec(arg_stream);
@@ -29,7 +30,8 @@ std::shared_ptr<Material> load_mat(std::istringstream& arg_stream) {
 	arg_stream >> brightness;
 	arg_stream >> glossiness;
 	arg_stream >> opacity;
-	return std::make_shared<Material>(Material{name, ka, kd, ks, brightness, glossiness, opacity});
+	arg_stream >> density;
+	return std::make_shared<Material>(Material{name, ka, kd, ks, brightness, glossiness, opacity, density});
 }
 
 std::shared_ptr<Box> load_box(std::istringstream& arg_stream, std::map<std::string, std::shared_ptr<Material>> const& materials) {

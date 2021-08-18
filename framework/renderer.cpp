@@ -10,11 +10,17 @@
 #include <chrono>
 #include "renderer.hpp"
 
-Renderer::Renderer(unsigned w, unsigned h, std::string const& file)
-		: width_(w), height_(h), color_buffer_(w * h, Color{0.0, 0.0, 0.0}), filename_(file), ppm_(width_, height_) {}
+#define EPSILON 0.001f
+
+Renderer::Renderer(unsigned w, unsigned h, std::string const& file, unsigned max_ray_bounces) :
+		width_(w),
+		height_(h),
+		color_buffer_(w * h, Color{0.0, 0.0, 0.0}),
+		filename_(file), ppm_(width_, height_),
+		max_ray_bounces_(max_ray_bounces) {}
 
 #define PI 3.14159265f
-#define MAX_RAY_DEPTH 2
+#define MAX_RAY_DEPTH 5
 
 void Renderer::render(Scene const& scene, Camera const& cam) {
 	glm::vec4 u = glm::vec4(glm::cross(cam.direction, cam.up), 0);
@@ -30,7 +36,7 @@ void Renderer::render(Scene const& scene, Camera const& cam) {
 			glm::vec3 ray_dir = glm::normalize(glm::vec3{min_x + x, min_y + y, -img_plane_dist});
 			Ray ray = transform_ray({{}, ray_dir}, c);
 			Pixel pixel {x, y};
-			pixel.color = trace(ray, scene, MAX_RAY_DEPTH);
+			pixel.color = trace(ray, scene);
 			write(pixel);
 		}
 	}
@@ -57,23 +63,22 @@ void Renderer::write(Pixel const& p) {
 	ppm_.write(p);
 }
 
-Color Renderer::trace(Ray const& ray, Scene const& scene, unsigned ray_depth) const {
-	HitPoint closest_hit = get_closest_hit(ray, scene);
-	return closest_hit.does_intersect ? shade(closest_hit, scene, ray_depth) : Color {};
+Color Renderer::trace(Ray const& ray, Scene const& scene, unsigned ray_bounces) const {
+	HitPoint closest_hit = scene.root->intersect(ray);
+	return closest_hit.does_intersect ? shade(closest_hit, scene, ray_bounces) : Color {};
 }
 
-HitPoint Renderer::get_closest_hit(Ray const& ray, Scene const& scene) const {
-	HitPoint closest_hit{};
-	HitPoint hit = scene.root->intersect(ray);
-
-	if (!hit.does_intersect) {
-		return hit;
-	}
-	if (!closest_hit.does_intersect || hit.distance < closest_hit.distance) {
-		closest_hit = hit;
-	}
-	return closest_hit;
-}
+//HitPoint Renderer::get_closest_hit(Ray const& ray, Scene const& scene) const {
+//	 = scene.root->intersect(ray);
+//
+//	if (!closest_hit.does_intersect) {
+//		return closest_hit;
+//	}
+//	if (!closest_hit.does_intersect || hit.distance < closest_hit.distance) {
+//		closest_hit = hit;
+//	}
+//	return closest_hit;
+//}
 
 HitPoint Renderer::find_light_block(Ray const& light_ray, float range, Scene const& scene) const {
 	HitPoint hit = scene.root->intersect(light_ray);
@@ -84,13 +89,18 @@ HitPoint Renderer::find_light_block(Ray const& light_ray, float range, Scene con
 	return HitPoint {};
 }
 
-Color Renderer::shade(HitPoint const& hit_point, Scene const& scene, unsigned ray_depth) const {
+Color Renderer::shade(HitPoint const& hit_point, Scene const& scene, unsigned ray_bounces) const {
 	Color shaded_color {0, 0, 0};
 //	shaded_color += normal_color(hit_point);
-	shaded_color += phong_color(hit_point, scene);
+	shaded_color += phong_color(hit_point, scene) * hit_point.hit_material->opacity;
 
-	if (hit_point.hit_material->m != 0 && ray_depth > 0) {
-		shaded_color += reflection(hit_point, scene, ray_depth);
+	if (ray_bounces < max_ray_bounces_) {
+		if (hit_point.hit_material->m > 0) {
+			shaded_color += reflection(hit_point, scene, ray_bounces);
+		}
+		if (hit_point.hit_material->opacity < 1) {
+			shaded_color += refraction(hit_point, scene, ray_bounces);
+		}
 	}
 	return tone_map_color(shaded_color);
 }
@@ -145,9 +155,43 @@ Color Renderer::specular_color(
 	return light_intensity * material->ks * specular_factor;
 }
 
-Color Renderer::reflection(HitPoint const& hit_point, Scene const& scene, unsigned ray_depth) const {
-	glm::vec3 new_dir = glm::reflect(hit_point.ray_direction, hit_point.surface_normal);
-	return trace(Ray{hit_point.position, new_dir}, scene, ray_depth - 1) * hit_point.hit_material->glossiness;
+Color Renderer::reflection(HitPoint const& hit_point, Scene const& scene, unsigned ray_bounces) const {
+	glm::vec3 ray_dir = hit_point.ray_direction;
+	glm::vec3 normal = hit_point.surface_normal;
+
+	float cos_incoming = -glm::dot(normal, ray_dir);
+	glm::vec3 new_dir = ray_dir + (normal * cos_incoming * 2.0f);
+	return trace({hit_point.position, new_dir}, scene, ray_bounces + 1) * hit_point.hit_material->glossiness;
+}
+
+Color Renderer::refraction(HitPoint const& hit_point, Scene const& scene, unsigned ray_bounces) const {
+	glm::vec3 ray_dir = hit_point.ray_direction;
+	glm::vec3 normal = hit_point.surface_normal;
+
+	float cos_incoming = -glm::dot(normal, ray_dir);
+
+	float new_density = hit_point.hit_material->density;
+	float eta;
+	int sign = (cos_incoming > 0) - (cos_incoming < 0);
+	if (cos_incoming > 0) {
+		eta = 1 / new_density;
+	}else {
+		eta = new_density;
+		cos_incoming *= -1;
+		normal *= -1.0f;
+	}
+
+
+
+
+//	glm::vec3 new_dir = ray_dir;
+	glm::vec3 new_dir = glm::refract(ray_dir, normal, eta);
+//	glm::vec3 new_dir = ray_dir;
+//	std::cout << ray_dir << " reftacted to" << new_dir << "\n";
+
+	Ray new_ray {hit_point.position - hit_point.surface_normal * (sign * 2 * EPSILON), glm::normalize(new_dir)};
+
+	return trace(new_ray, scene, ray_bounces + 1) * (1 - hit_point.hit_material->opacity);
 }
 
 Color Renderer::normal_color(HitPoint const& hit_point) const {
