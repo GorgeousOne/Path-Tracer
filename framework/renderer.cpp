@@ -10,36 +10,74 @@
 #include <chrono>
 #include "renderer.hpp"
 
-Renderer::Renderer(unsigned w, unsigned h, std::string const& file)
-		: width_(w), height_(h), color_buffer_(w * h, Color{0.0, 0.0, 0.0}), filename_(file), ppm_(width_, height_) {}
+#define EPSILON 0.001f
+
+Renderer::Renderer(unsigned w, unsigned h, std::string const& file, unsigned max_ray_bounces) :
+		width_(w),
+		height_(h),
+		color_buffer_(w * h, Color{0.0, 0.0, 0.0}),
+		filename_(file), ppm_(width_, height_),
+		max_ray_bounces_(max_ray_bounces) {}
 
 #define PI 3.14159265f
-#define MAX_RAY_DEPTH 2
 
-void Renderer::render(Scene const& scene, Camera const& cam) {
-	glm::vec4 u = glm::vec4(glm::cross(cam.direction, cam.up), 0);
-	glm::vec4 v = glm::vec4(glm::cross({u.x, u.y, u.z}, cam.direction), 0);
-	glm::mat4 c {u, v, glm::vec4{-cam.direction, 0}, glm::vec4{cam.position, 1}};
+void Renderer::render(Scene const& scene) {
+	Camera cam = scene.camera;
+	float fov_radians = cam.fov_x / 180 * PI;
+	float img_plane_dist = (width_ / 2.0f) / tan(fov_radians / 2);
 
-	float img_plane_dist = (width_ / 2.0f) / tan(cam.fov_x / 2);
-	float min_x = -(width_ / 2.0f);
-	float min_y = -(height_ / 2.0f);
+	glm::vec3 u = glm::cross(cam.direction, cam.up);
+	glm::vec3 v = glm::cross(u, cam.direction);
+	glm::mat4 trans_mat{
+			glm::vec4{u, 0},
+			glm::vec4{v, 0},
+			glm::vec4{-cam.direction, 0},
+			glm::vec4{cam.position, 1}
+	};
+	//gets amount of parallel threads supported by hardware
+	size_t core_count = std::thread::hardware_concurrency();
+	std::vector<std::thread> threads;
+	threads.resize(core_count);
 
-	for (unsigned x = 0; x < width_; ++x) {
-		for (unsigned y = 0; y < height_; ++y) {
-			glm::vec3 ray_dir = glm::normalize(glm::vec3{min_x + x, min_y + y, -img_plane_dist});
-			Ray ray = transform_ray({{}, ray_dir}, c);
-			Pixel pixel {x, y};
-			pixel.color = trace(ray, scene, MAX_RAY_DEPTH);
-			write(pixel);
-		}
-	}
 	auto start = std::chrono::steady_clock::now();
-	ppm_.save(filename_);
+	pixel_index_ = 0;
+
+	//starts parallel threads all doing the same task
+	for (std::thread& t : threads) {
+		t = std::thread(&Renderer::thread_function, this, scene, img_plane_dist, trans_mat);
+	}
+	//lets main thread wait until all parallel threads finished
+	for (std::thread& t : threads) {
+		t.join();
+	}
 	auto end = std::chrono::steady_clock::now();
 	std::chrono::duration<double> elapsed_seconds = end-start;
-	std::cout << "save " << filename_ << "\n";
-	std::cout << elapsed_seconds.count() << "s save time\n";
+	std::cout << elapsed_seconds.count() << "s rendering\n";
+
+	ppm_.save(filename_);
+}
+
+void Renderer::thread_function(Scene const& scene, float img_plane_dist, glm::mat4 const& trans_mat) {
+	//continuously picks pixels to render
+	while (true) {
+		unsigned current_pixel = pixel_index_++;
+		unsigned x = current_pixel % width_;
+		unsigned y = current_pixel / width_;
+
+		if (current_pixel >= width_ * height_) {
+			return;
+		}
+		glm::vec3 pixel_pos = glm::vec3{
+				x - (width_ * 0.5f),
+				y - (height_ * 0.5f),
+				-img_plane_dist};
+
+		glm::vec4 trans_ray_dir = trans_mat * glm::vec4{ glm::normalize(pixel_pos), 0 };
+		Ray ray{ glm::vec3{trans_mat[3]}, glm::vec3{trans_ray_dir} };
+		Pixel pixel{ x, y };
+		pixel.color = tone_map_color(trace(ray, scene));
+		write(pixel);
+	}
 }
 
 void Renderer::write(Pixel const& p) {
@@ -57,42 +95,33 @@ void Renderer::write(Pixel const& p) {
 	ppm_.write(p);
 }
 
-Color Renderer::trace(Ray const& ray, Scene const& scene, unsigned ray_depth) const {
-	HitPoint closest_hit = get_closest_hit(ray, scene);
-	return closest_hit.does_intersect ? shade(closest_hit, scene, ray_depth) : Color {};
+Color Renderer::trace(Ray const& ray, Scene const& scene, unsigned ray_bounces) const {
+	HitPoint closest_hit = scene.root->intersect(ray);
+	return closest_hit.does_intersect ? shade(closest_hit, scene, ray_bounces) : Color {};
 }
 
-HitPoint Renderer::get_closest_hit(Ray const& ray, Scene const& scene) const {
-	HitPoint closest_hit{};
-	HitPoint hit = scene.root->intersect(ray);
+Color Renderer::shade(HitPoint const& hit_point, Scene const& scene, unsigned ray_bounces) const {
+	auto material = hit_point.hit_material;
+	Color shaded_color = phong_color(hit_point, scene) * material->opacity;
 
-	if (!hit.does_intersect) {
-		return hit;
+	if (ray_bounces >= max_ray_bounces_) {
+		return shaded_color;
 	}
-	if (!closest_hit.does_intersect || hit.distance < closest_hit.distance) {
-		closest_hit = hit;
+	if (material->glossiness > 0 && material->opacity < 1) {
+		float reflectiveness = schlick_reflection_ratio(hit_point.ray_direction, hit_point.surface_normal, material->ior);
+		shaded_color *= reflectiveness * material->opacity;
+		shaded_color += reflection(hit_point, scene, ray_bounces) * reflectiveness;
+		shaded_color += refraction(hit_point, scene, ray_bounces) * (1 - reflectiveness);
+	} else if (material->glossiness > 0) {
+		float reflectiveness = schlick_reflection_ratio(hit_point.ray_direction, hit_point.surface_normal, material->ior);
+		reflectiveness = material->glossiness + (1 - material->glossiness) * reflectiveness;
+		shaded_color *= 1 - reflectiveness;
+		shaded_color += reflection(hit_point, scene, ray_bounces) * reflectiveness;
+	} else if (material->opacity < 1) {
+		shaded_color *= material->opacity;
+		shaded_color += refraction(hit_point, scene, ray_bounces) * (1 - material->opacity);
 	}
-	return closest_hit;
-}
-
-HitPoint Renderer::find_light_block(Ray const& light_ray, float range, Scene const& scene) const {
-	HitPoint hit = scene.root->intersect(light_ray);
-
-	if (hit.does_intersect && hit.distance <= range) {
-		return hit;
-	}
-	return HitPoint {};
-}
-
-Color Renderer::shade(HitPoint const& hit_point, Scene const& scene, unsigned ray_depth) const {
-	Color shaded_color {0, 0, 0};
-//	shaded_color += normal_color(hit_point);
-	shaded_color += phong_color(hit_point, scene);
-
-	if (hit_point.hit_material->m != 0 && ray_depth > 0) {
-		shaded_color += reflection(hit_point, scene, ray_depth);
-	}
-	return tone_map_color(shaded_color);
+	return shaded_color;
 }
 
 Color Renderer::phong_color(HitPoint const& hit_point, Scene const& scene) const {
@@ -128,6 +157,15 @@ Color Renderer::phong_color(HitPoint const& hit_point, Scene const& scene) const
 	return phong_color;
 }
 
+HitPoint Renderer::find_light_block(Ray const& light_ray, float range, Scene const& scene) const {
+	HitPoint hit = scene.root->intersect(light_ray);
+
+	if (hit.does_intersect && hit.distance <= range) {
+		return hit;
+	}
+	return HitPoint {};
+}
+
 Color Renderer::specular_color(
 		glm::vec3 const& viewer_dir,
 		glm::vec3 const& light_dir,
@@ -145,9 +183,88 @@ Color Renderer::specular_color(
 	return light_intensity * material->ks * specular_factor;
 }
 
-Color Renderer::reflection(HitPoint const& hit_point, Scene const& scene, unsigned ray_depth) const {
-	glm::vec3 new_dir = glm::reflect(hit_point.ray_direction, hit_point.surface_normal);
-	return trace(Ray{hit_point.position, new_dir}, scene, ray_depth - 1) * hit_point.hit_material->glossiness;
+Color Renderer::reflection(HitPoint const& hit_point, Scene const& scene, unsigned ray_bounces) const {
+	glm::vec3 ray_dir = hit_point.ray_direction;
+	glm::vec3 normal = hit_point.surface_normal;
+
+	float cos_incoming = -glm::dot(normal, ray_dir);
+	glm::vec3 new_dir = ray_dir + (normal * cos_incoming * 2.0f);
+	return trace({hit_point.position, new_dir}, scene, ray_bounces + 1);
+}
+
+Color Renderer::refraction(HitPoint const& hit_point, Scene const& scene, unsigned ray_bounces) const {
+	glm::vec3 ray_dir = hit_point.ray_direction;
+	glm::vec3 normal = hit_point.surface_normal;
+	float eta = 1 / hit_point.hit_material->ior;
+	float cos_incoming = -glm::dot(normal, ray_dir);
+	//inverts negative incoming angle and normal vector if surface is hit from behind
+	if (cos_incoming < 0) {
+		eta = 1 / eta;
+		cos_incoming *= -1;
+		normal *= -1;
+	}
+	float cos_outgoing_squared = 1 - eta * eta * (1 - cos_incoming * cos_incoming);
+
+	//returns total reflection if critical angle is reached
+	if (cos_outgoing_squared < 0) {
+		return reflection(hit_point, scene, ray_bounces);
+	}else {
+		//glm::vec3 new_dir = glm::refract(ray_dir, normal, eta);
+		glm::vec3 new_dir = ray_dir * eta + normal * (eta * cos_incoming - sqrtf(cos_outgoing_squared));
+		Ray new_ray {hit_point.position - normal * (2 * EPSILON), new_dir};
+		return trace(new_ray, scene, ray_bounces + 1) * (1 - hit_point.hit_material->opacity);
+	}
+}
+
+//https://en.wikipedia.org/wiki/Fresnel_equations
+//https://www.scratchapixel.com/lessons/3d-basic-rendering/introduction-to-shading/reflection-refraction-fresnel
+float Renderer::fresnel_reflection_ratio(glm::vec3 const& ray_dir, glm::vec3 const& normal, float const& ior) const {
+	float cos_in = glm::dot(normal, ray_dir);
+	float eta_in = 1;
+	float eta_out = ior;
+
+	if (cos_in > 0) {
+		std::swap(eta_in, eta_out);
+	}
+	float sin_out = eta_in / eta_out * sqrtf(1 - cos_in * cos_in);
+	//total internal reflection
+	if (sin_out >= 1) {
+		return 1;
+	} else {
+		float cos_out = sqrtf(std::max(0.0f, 1 - sin_out * sin_out));
+		cos_in = fabsf(cos_in);
+		float reflectiveness_s_light = ((eta_out * cos_in) - (eta_in * cos_out)) / ((eta_out * cos_in) + (eta_in * cos_out));
+		float reflectiveness_p_light = ((eta_in * cos_in) - (eta_out * cos_out)) / ((eta_in * cos_in) + (eta_out * cos_out));
+		return (reflectiveness_s_light * reflectiveness_s_light + reflectiveness_p_light * reflectiveness_p_light) / 2;
+	}
+}
+
+//https://blog.demofox.org/2017/01/09/raytracing-reflection-refraction-fresnel-total-internal-reflection-and-beers-law/
+//https://en.wikipedia.org/wiki/Schlick%27s_approximation
+float Renderer::schlick_reflection_ratio(glm::vec3 const& ray_dir, glm::vec3 const& normal, float const& ior) const {
+	float n1 = 1;
+	float n2 = ior;
+	float cos_incoming = -glm::dot(normal, ray_dir);
+
+	if (cos_incoming < 0) {
+		std::swap(n1, n2);
+	}
+	if (n1 > n2) {
+		float eta = n1 / n2;
+		float sin_outgoing_squared = eta * eta * (1 - cos_incoming * cos_incoming);
+
+		if (sin_outgoing_squared >= 1) {
+			return 1;
+		}
+		cos_incoming = sqrtf(1 - sin_outgoing_squared);
+	}
+
+	float min_reflectance = (1 - ior) / (1 + ior);
+	min_reflectance *= min_reflectance;
+
+	float factor = 1 - cos_incoming;
+	float ratio = min_reflectance + (1 - min_reflectance) * factor * factor * factor * factor * factor;
+	return ratio;
 }
 
 Color Renderer::normal_color(HitPoint const& hit_point) const {
@@ -158,7 +275,7 @@ Color Renderer::normal_color(HitPoint const& hit_point) const {
 	};
 }
 
-Color& Renderer::tone_map_color(Color& color) const {
+Color Renderer::tone_map_color(Color color) const {
 	color.r /= color.r + 1;
 	color.g /= color.g + 1;
 	color.b /= color.b + 1;

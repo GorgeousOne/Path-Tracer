@@ -30,7 +30,7 @@ std::shared_ptr<Triangle> load_obj_face(
 		std::istringstream& arg_stream,
 		std::vector<glm::vec3> const& vertices,
 		std::vector<glm::vec3> const& normals,
-		std::string name,
+		std::string const& name,
 		std::shared_ptr<Material> mat);
 std::shared_ptr<Composite> load_obj(std::string const& directory_path, std::string const& name);
 
