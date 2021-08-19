@@ -12,11 +12,12 @@
 
 #define EPSILON 0.001f
 
-Renderer::Renderer(unsigned w, unsigned h, std::string const& file, unsigned max_ray_bounces) :
+Renderer::Renderer(unsigned w, unsigned h, std::string const& file, unsigned aa_steps, unsigned max_ray_bounces) :
 		width_(w),
 		height_(h),
 		color_buffer_(w * h, Color{0.0, 0.0, 0.0}),
 		filename_(file), ppm_(width_, height_),
+		aa_steps_(aa_steps),
 		max_ray_bounces_(max_ray_bounces) {}
 
 #define PI 3.14159265f
@@ -58,6 +59,7 @@ void Renderer::render(Scene const& scene) {
 }
 
 void Renderer::thread_function(Scene const& scene, float img_plane_dist, glm::mat4 const& trans_mat) {
+	float aa_unit = 1.0f / aa_steps_;
 	//continuously picks pixels to render
 	while (true) {
 		unsigned current_pixel = pixel_index_++;
@@ -67,15 +69,23 @@ void Renderer::thread_function(Scene const& scene, float img_plane_dist, glm::ma
 		if (current_pixel >= width_ * height_) {
 			return;
 		}
-		glm::vec3 pixel_pos = glm::vec3{
-				x - (width_ * 0.5f),
-				y - (height_ * 0.5f),
-				-img_plane_dist};
+		Color traced_color{};
 
-		glm::vec4 trans_ray_dir = trans_mat * glm::vec4{ glm::normalize(pixel_pos), 0 };
-		Ray ray{ glm::vec3{trans_mat[3]}, glm::vec3{trans_ray_dir} };
+		for (int aax = 0; aax < aa_steps_; ++aax) {
+			for (int aay = 0; aay < aa_steps_; ++aay) {
+				glm::vec3 pixel_pos = glm::vec3{
+						x + aax * aa_unit - (width_ * 0.5f),
+						y + aay * aa_unit - (height_ * 0.5f),
+						-img_plane_dist};
+
+				glm::vec4 trans_ray_dir = trans_mat * glm::vec4{ glm::normalize(pixel_pos), 0 };
+				Ray ray{ glm::vec3{trans_mat[3]}, glm::vec3{trans_ray_dir} };
+				traced_color += trace(ray, scene);
+			}
+		}
+		traced_color *= 1.0f / (aa_steps_ * aa_steps_);
 		Pixel pixel{ x, y };
-		pixel.color = tone_map_color(trace(ray, scene));
+		pixel.color = tone_map_color(traced_color);
 		write(pixel);
 	}
 }
