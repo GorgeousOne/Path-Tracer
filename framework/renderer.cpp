@@ -108,13 +108,15 @@ Color Renderer::shade(HitPoint const& hit_point, Scene const& scene, unsigned ra
 		return shaded_color;
 	}
 	if (material->glossiness > 0 && material->opacity < 1) {
-		shaded_color *= 0;
-		float reflectiveness = fresnel_reflection_ratio(hit_point.ray_direction, hit_point.surface_normal, material->ior);
+		float reflectiveness = schlick_reflection_ratio(hit_point.ray_direction, hit_point.surface_normal, material->ior);
+		shaded_color *= reflectiveness * material->opacity;
 		shaded_color += reflection(hit_point, scene, ray_bounces) * reflectiveness;
 		shaded_color += refraction(hit_point, scene, ray_bounces) * (1 - reflectiveness);
 	} else if (material->glossiness > 0) {
-		shaded_color *= 1 - material->glossiness;
-		shaded_color += reflection(hit_point, scene, ray_bounces) * material->glossiness;
+		float reflectiveness = schlick_reflection_ratio(hit_point.ray_direction, hit_point.surface_normal, material->ior);
+		reflectiveness = material->glossiness + (1 - material->glossiness) * reflectiveness;
+		shaded_color *= 1 - reflectiveness;
+		shaded_color += reflection(hit_point, scene, ray_bounces) * reflectiveness;
 	} else if (material->opacity < 1) {
 		shaded_color *= material->opacity;
 		shaded_color += refraction(hit_point, scene, ray_bounces) * (1 - material->opacity);
@@ -201,19 +203,21 @@ Color Renderer::refraction(HitPoint const& hit_point, Scene const& scene, unsign
 		cos_incoming *= -1;
 		normal *= -1;
 	}
-//	glm::vec3 new_dir = glm::refract(ray_dir, normal, eta);
 	float cos_outgoing_squared = 1 - eta * eta * (1 - cos_incoming * cos_incoming);
 
 	//returns total reflection if critical angle is reached
 	if (cos_outgoing_squared < 0) {
 		return reflection(hit_point, scene, ray_bounces);
 	}else {
+		//glm::vec3 new_dir = glm::refract(ray_dir, normal, eta);
 		glm::vec3 new_dir = ray_dir * eta + normal * (eta * cos_incoming - sqrtf(cos_outgoing_squared));
 		Ray new_ray {hit_point.position - normal * (2 * EPSILON), new_dir};
 		return trace(new_ray, scene, ray_bounces + 1) * (1 - hit_point.hit_material->opacity);
 	}
 }
 
+//https://en.wikipedia.org/wiki/Fresnel_equations
+//https://www.scratchapixel.com/lessons/3d-basic-rendering/introduction-to-shading/reflection-refraction-fresnel
 float Renderer::fresnel_reflection_ratio(glm::vec3 const& ray_dir, glm::vec3 const& normal, float const& ior) const {
 	float cos_in = glm::dot(normal, ray_dir);
 	float eta_in = 1;
@@ -222,17 +226,45 @@ float Renderer::fresnel_reflection_ratio(glm::vec3 const& ray_dir, glm::vec3 con
 	if (cos_in > 0) {
 		std::swap(eta_in, eta_out);
 	}
-	float sin_out = eta_in / eta_out * sqrtf(std::max(0.0f, 1 - cos_in * cos_in));
-	// Total internal reflection
+	float sin_out = eta_in / eta_out * sqrtf(1 - cos_in * cos_in);
+	//total internal reflection
 	if (sin_out >= 1) {
 		return 1;
 	} else {
-		float cost = sqrtf(std::max(0.f, 1 - sin_out * sin_out));
+		float cos_out = sqrtf(std::max(0.0f, 1 - sin_out * sin_out));
 		cos_in = fabsf(cos_in);
-		float reflectiveness_s = ((eta_out * cos_in) - (eta_in * cost)) / ((eta_out * cos_in) + (eta_in * cost));
-		float reflectiveness_p = ((eta_in * cos_in) - (eta_out * cost)) / ((eta_in * cos_in) + (eta_out * cost));
-		return (reflectiveness_s * reflectiveness_s + reflectiveness_p * reflectiveness_p) / 2;
+		float reflectiveness_s_light = ((eta_out * cos_in) - (eta_in * cos_out)) / ((eta_out * cos_in) + (eta_in * cos_out));
+		float reflectiveness_p_light = ((eta_in * cos_in) - (eta_out * cos_out)) / ((eta_in * cos_in) + (eta_out * cos_out));
+		return (reflectiveness_s_light * reflectiveness_s_light + reflectiveness_p_light * reflectiveness_p_light) / 2;
 	}
+}
+
+//https://blog.demofox.org/2017/01/09/raytracing-reflection-refraction-fresnel-total-internal-reflection-and-beers-law/
+//https://en.wikipedia.org/wiki/Schlick%27s_approximation
+float Renderer::schlick_reflection_ratio(glm::vec3 const& ray_dir, glm::vec3 const& normal, float const& ior) const {
+	float n1 = 1;
+	float n2 = ior;
+	float cos_incoming = -glm::dot(normal, ray_dir);
+
+	if (cos_incoming < 0) {
+		std::swap(n1, n2);
+	}
+	if (n1 > n2) {
+		float eta = n1 / n2;
+		float sin_outgoing_squared = eta * eta * (1 - cos_incoming * cos_incoming);
+
+		if (sin_outgoing_squared >= 1) {
+			return 1;
+		}
+		cos_incoming = sqrtf(1 - sin_outgoing_squared);
+	}
+
+	float min_reflectance = (1 - ior) / (1 + ior);
+	min_reflectance *= min_reflectance;
+
+	float factor = 1 - cos_incoming;
+	float ratio = min_reflectance + (1 - min_reflectance) * factor * factor * factor * factor * factor;
+	return ratio;
 }
 
 Color Renderer::normal_color(HitPoint const& hit_point) const {

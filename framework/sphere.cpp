@@ -8,7 +8,7 @@
 
 Sphere::Sphere(float radius, glm::vec3 const& center, std::string const& name, std::shared_ptr<Material> material) :
 		Shape(name, material),
-		radius_(std::abs(radius)),
+		radius_(abs(radius)),
 		center_(center) {}
 
 float Sphere::area() const {
@@ -16,7 +16,7 @@ float Sphere::area() const {
 }
 
 float Sphere::volume() const {
-	return 4.0f / 3.0f * PI * std::abs(pow(radius_, 3));
+	return 4.0f / 3.0f * PI * abs(pow(radius_, 3));
 }
 
 glm::vec3 Sphere::min(glm::mat4 const& transform) const {

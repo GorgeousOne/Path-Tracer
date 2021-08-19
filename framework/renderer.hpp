@@ -56,6 +56,7 @@ private:
 	Color reflection(HitPoint const& hitPoint, Scene const& scene, unsigned bounces) const;
 	Color refraction(const HitPoint &hit_point, const Scene &scene, unsigned int ray_bounces) const;
 	float fresnel_reflection_ratio(glm::vec3 const& ray_dir, glm::vec3 const& normal, float const& ior) const;
+	float schlick_reflection_ratio(glm::vec3 const& ray_dir, glm::vec3 const& normal, float const& ior) const;
 };
 
 #endif // #ifndef BUW_RENDERER_HPP
