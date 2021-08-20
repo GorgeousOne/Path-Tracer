@@ -6,7 +6,7 @@
 
 struct Light {
 	std::string name = "default";
-	Color color {255, 255, 255};
+	Color color {1, 1, 1};
 	float brightness = 1;
 	Color intensity = color * brightness;
 };

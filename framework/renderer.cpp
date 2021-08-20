@@ -117,16 +117,16 @@ Color Renderer::shade(HitPoint const& hit_point, Scene const& scene, unsigned ra
 	if (ray_bounces >= max_ray_bounces_) {
 		return shaded_color;
 	}
-	if (material->glossiness > 0 && material->opacity < 1) {
-		float reflectiveness = schlick_reflection_ratio(hit_point.ray_direction, hit_point.surface_normal, material->ior);
-		shaded_color *= reflectiveness * material->opacity;
-		shaded_color += reflection(hit_point, scene, ray_bounces) * reflectiveness;
-		shaded_color += refraction(hit_point, scene, ray_bounces) * (1 - reflectiveness);
-	} else if (material->glossiness > 0) {
-		float reflectiveness = schlick_reflection_ratio(hit_point.ray_direction, hit_point.surface_normal, material->ior);
-		reflectiveness = material->glossiness + (1 - material->glossiness) * reflectiveness;
-		shaded_color *= 1 - reflectiveness;
-		shaded_color += reflection(hit_point, scene, ray_bounces) * reflectiveness;
+	if (material->glossy > 0 && material->opacity < 1) {
+		float reflectance = schlick_reflection_ratio(hit_point.ray_direction, hit_point.surface_normal, material->ior);
+		shaded_color *= reflectance * material->opacity;
+		shaded_color += reflection(hit_point, scene, ray_bounces) * reflectance;
+		shaded_color += refraction(hit_point, scene, ray_bounces) * (1 - reflectance) * (1 - material->opacity);
+	} else if (material->glossy > 0) {
+		float reflectance = schlick_reflection_ratio(hit_point.ray_direction, hit_point.surface_normal, material->ior);
+		reflectance = material->glossy + (1 - material->glossy) * reflectance;
+		shaded_color *= 1 - reflectance;
+		shaded_color += reflection(hit_point, scene, ray_bounces) * reflectance;
 	} else if (material->opacity < 1) {
 		shaded_color *= material->opacity;
 		shaded_color += refraction(hit_point, scene, ray_bounces) * (1 - material->opacity);
@@ -136,8 +136,8 @@ Color Renderer::shade(HitPoint const& hit_point, Scene const& scene, unsigned ra
 
 Color Renderer::phong_color(HitPoint const& hit_point, Scene const& scene) const {
 	auto material = hit_point.hit_material;
+	//adds ambient light
 	Color phong_color = scene.ambient.intensity * material->ka;
-	Color specular_light {};
 
 	for (PointLight const& light : scene.lights)  {
 		glm::vec3 light_dir = light.position - hit_point.position;
@@ -150,20 +150,18 @@ Color Renderer::phong_color(HitPoint const& hit_point, Scene const& scene) const
 		}
 		glm::vec3 normal = hit_point.surface_normal;
 		float cos_view_angle = glm::dot(normal, light_dir);
-
 		//back culls specular reflection
 		if (cos_view_angle < 0) {
 			continue;
 		}
 		//adds diffuse light
-		phong_color += (light.intensity * material->kd * cos_view_angle);
+		phong_color += light.intensity * material->kd * cos_view_angle;
 
+		//adds specular light
 		if (material->m != 0) {
-			specular_light += specular_color(hit_point.ray_direction, light_dir, normal, light.intensity, material);
+			phong_color += specular_color(hit_point.ray_direction, light_dir, normal, light.intensity, material);
 		}
 	}
-	phong_color *= (1 - material->glossiness);
-	phong_color += specular_light * material->glossiness;
 	return phong_color;
 }
 
@@ -199,7 +197,7 @@ Color Renderer::reflection(HitPoint const& hit_point, Scene const& scene, unsign
 
 	float cos_incoming = -glm::dot(normal, ray_dir);
 	glm::vec3 new_dir = ray_dir + (normal * cos_incoming * 2.0f);
-	return trace({hit_point.position, new_dir}, scene, ray_bounces + 1);
+	return trace({hit_point.position, new_dir}, scene, ray_bounces + 1) * hit_point.hit_material->ks;
 }
 
 Color Renderer::refraction(HitPoint const& hit_point, Scene const& scene, unsigned ray_bounces) const {
@@ -222,7 +220,7 @@ Color Renderer::refraction(HitPoint const& hit_point, Scene const& scene, unsign
 		//glm::vec3 new_dir = glm::refract(ray_dir, normal, eta);
 		glm::vec3 new_dir = ray_dir * eta + normal * (eta * cos_incoming - sqrtf(cos_outgoing_squared));
 		Ray new_ray {hit_point.position - normal * (2 * EPSILON), new_dir};
-		return trace(new_ray, scene, ray_bounces + 1) * (1 - hit_point.hit_material->opacity);
+		return trace(new_ray, scene, ray_bounces + 1) * hit_point.hit_material->kd;
 	}
 }
 

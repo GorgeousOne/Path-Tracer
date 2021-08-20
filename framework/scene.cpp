@@ -16,6 +16,12 @@ glm::vec3 load_vec(std::istringstream& arg_stream) {
 	return v;
 }
 
+Color load_color(std::istringstream& arg_stream) {
+	Color c;
+	arg_stream >> c.r >> c.g >> c.b;
+	return c;
+}
+
 std::shared_ptr<Material> load_mat(std::istringstream& arg_stream) {
 	std::string name;
 	float brightness;
@@ -24,9 +30,9 @@ std::shared_ptr<Material> load_mat(std::istringstream& arg_stream) {
 	float ior;
 
 	arg_stream >> name;
-	glm::vec3 ka = load_vec(arg_stream);
-	glm::vec3 kd = load_vec(arg_stream);
-	glm::vec3 ks = load_vec(arg_stream);
+	Color ka = load_color(arg_stream);
+	Color kd = load_color(arg_stream);
+	Color ks = load_color(arg_stream);
 	arg_stream >> brightness;
 	arg_stream >> glossiness;
 	arg_stream >> opacity;
@@ -77,14 +83,12 @@ std::shared_ptr<Triangle> load_triangle(std::istringstream& arg_stream, std::map
 
 PointLight load_point_light(std::istringstream& arg_stream) {
 	std::string name;
-	Color color;
 	float brightness;
 
 	arg_stream >> name;
 	glm::vec3 pos = load_vec(arg_stream);
-	arg_stream >> color.r >> color.g >> color.b;
+	Color color = load_color(arg_stream);
 	arg_stream >> brightness;
-
 	return {name, color, pos, brightness};
 }
 
@@ -141,11 +145,11 @@ std::map<std::string, std::shared_ptr<Material>> load_obj_materials(std::string 
 			arg_stream >> current_mat->name;
 			materials.emplace(current_mat->name, current_mat);
 		} else if ("Ka" == token) {
-			current_mat->ka = load_vec(arg_stream);
+			current_mat->ka = load_color(arg_stream);
 		} else if ("Kd" == token) {
-			current_mat->kd = load_vec(arg_stream);
+			current_mat->kd = load_color(arg_stream);
 		} else if ("Ks" == token) {
-			current_mat->ks = load_vec(arg_stream);
+			current_mat->ks = load_color(arg_stream);
 		} else if ("Ns" == token) {
 			arg_stream >> current_mat->m;
 		} else if ("illum" == token) {
@@ -153,10 +157,18 @@ std::map<std::string, std::shared_ptr<Material>> load_obj_materials(std::string 
 			arg_stream >> model;
 
 			switch (model) {
+				//Highlight on (default output of blender files)
 				case 2:
-					current_mat->glossiness = 0.5;
+					current_mat->glossy = 1;
 					break;
+				//Transparency: Refraction on, Reflection: Fresnel on and Ray trace on
+				case 7:
+					current_mat->glossy = 0.01;
 			}
+		} else if ("d" == token) {
+			arg_stream >> current_mat->opacity;
+		} else if ("Ni" == token) {
+			arg_stream >> current_mat->ior;
 		}
 	}
 	return materials;
@@ -347,12 +359,16 @@ void transform(std::istringstream& arg_stream, Scene& scene) {
 		arg_stream >> yaw;
 		arg_stream >> pitch;
 		arg_stream >> roll;
-		shape->rotate(yaw, pitch, roll);
+		shape->rotate(glm::radians(yaw), glm::radians(pitch), glm::radians(roll));
 
 	} else if ("scale" == action) {
-		float scale;
-		arg_stream >> scale;
-		shape->scale(scale, scale, scale);
+		float scale_x;
+		float scale_y;
+		float scale_z;
+		arg_stream >> scale_x;
+		arg_stream >> scale_y;
+		arg_stream >> scale_z;
+		shape->scale(scale_x, scale_y, scale_z);
 	}
 }
 
