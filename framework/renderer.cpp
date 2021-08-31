@@ -14,6 +14,7 @@
 #include "kernel3.hpp"
 
 #define PI 3.14159265f
+#define EPSILON 0.001f
 
 Renderer::Renderer(unsigned w, unsigned h, std::string const& file, unsigned pixel_samples, unsigned aa_samples, unsigned ray_bounces) :
 		width_(w * aa_samples),
@@ -62,11 +63,6 @@ void Renderer::render(Scene const& scene) {
 		t.join();
 	}
 	color_buffer();
-	ppm_.save(filename_ + "-noisy");
-	denoise();
-	denoise();
-	denoise();
-	color_buffer();
 	ppm_.save(filename_);
 }
 
@@ -95,32 +91,6 @@ void Renderer::thread_function(Scene const& scene, glm::mat4 const& cam_mat, flo
 	}
 }
 
-void Renderer::denoise() {
-	vector2d<Color> result(height_, std::vector<Color>(width_));
-
-	auto normal_adjustment = [](glm::vec3 const& center, glm::vec3 const& relative) {
-		float dot = glm::dot(center, relative);
-		return fmax(0, dot);
-	};
-	auto distance_adjustment = [](float center, float relative) {
-		return fmax(0, fmin(1, 1 - abs(relative - center)));
-	};
-	auto material_adjustment = [](std::shared_ptr<Material> center, std::shared_ptr<Material> relative) {
-		return relative == center;
-	};
-
-	for (unsigned y = 0; y < color_buffer_.size(); ++y) {
-		for (unsigned x = 0; x < color_buffer_.size(); ++x) {
-			glm::mat3 gaussian = gaussian_blur();
-			adjust_kernel<glm::vec3>(gaussian, y, x, normal_buffer_, normal_adjustment);
-			adjust_kernel<float>(gaussian, y, x, distance_buffer_, distance_adjustment);
-			adjust_kernel<std::shared_ptr<Material>>(gaussian, y, x, material_buffer_, material_adjustment);
-			apply_kernel(gaussian, y, x, color_buffer_, result);
-		}
-	}
-	color_buffer_ = result;
-}
-
 Color Renderer::primary_trace(unsigned y, unsigned x, Ray const& ray, Scene const& scene) {
 	HitPoint closest_hit = get_closest_hit(ray, scene);
 
@@ -130,12 +100,12 @@ Color Renderer::primary_trace(unsigned y, unsigned x, Ray const& ray, Scene cons
 	normal_buffer_[y][x] = closest_hit.surface_normal;
 	distance_buffer_[y][x] = closest_hit.distance;
 	material_buffer_[y][x] = closest_hit.hit_material;
-	return bounce_color(closest_hit, scene, pixel_samples_ / (aa_samples_ * aa_samples_), 0);
+	return shade(closest_hit, scene, pixel_samples_ / (aa_samples_ * aa_samples_), 0);
 }
 
-Color Renderer::trace(Ray const& ray, Scene const& scene, unsigned ray_bounces) {
+Color Renderer::trace(Ray const& ray, Scene const& scene, unsigned samples, unsigned ray_bounces) {
 	HitPoint closest_hit = get_closest_hit(ray, scene);
-	return closest_hit.does_intersect ? bounce_color(closest_hit, scene, 1, ray_bounces) : Color {};
+	return closest_hit.does_intersect ? shade(closest_hit, scene, samples, ray_bounces) : Color {};
 }
 
 HitPoint Renderer::get_closest_hit(Ray const& ray, Scene const& scene) const {
@@ -164,33 +134,143 @@ glm::vec3 uniform_normal(T& distribution, T2& generator) {
 	};
 }
 
-Color Renderer::bounce_color(HitPoint const& hit_point, Scene const& scene, unsigned samples, unsigned ray_bounces) {
+Color Renderer::shade(HitPoint const& hit_point, Scene const& scene, unsigned samples, unsigned ray_bounces) {
 	if (ray_bounces >= ray_bounces_) {
 		return {};
 	}
 	auto material = hit_point.hit_material;
+	Color bounced_light {}; // = diffuse(hit_point, scene, samples, ray_bounces);
+
+	if (material->glossy > 0 && material->opacity < 1) {
+		float reflectance = schlick_reflection_ratio(hit_point.ray_direction, hit_point.surface_normal, material->ior);
+		bounced_light += reflection(hit_point, scene, samples, ray_bounces) * reflectance;
+		bounced_light += refraction(hit_point, scene, samples, ray_bounces) * (1 - reflectance) * (1 - material->opacity);
+	} else if (material->glossy > 0) {
+		float reflectance = schlick_reflection_ratio(hit_point.ray_direction, hit_point.surface_normal, material->ior);
+		reflectance = material->glossy + (1 - material->glossy) * reflectance;
+
+		if (reflectance < 1) {
+			bounced_light += diffuse(hit_point, scene, samples, ray_bounces);
+			bounced_light *= 1 - reflectance;
+		}
+		bounced_light += reflection(hit_point, scene, samples, ray_bounces) * reflectance;
+	} else if (material->opacity < 1) {
+		bounced_light += refraction(hit_point, scene, samples, ray_bounces) * (1 - material->opacity);
+	}else {
+		bounced_light += diffuse(hit_point, scene, samples, ray_bounces);
+	}
+	return bounced_light;
+}
+
+Color Renderer::diffuse(HitPoint const& hit_point, Scene const& scene, unsigned samples, unsigned ray_bounces) {
 	Color bounced_light {};
+	auto material = hit_point.hit_material;
 
 	for (unsigned i = 0; i < samples; ++i) {
-		glm::vec3 bounce_dir;
-
-		if (material->glossiness != 0) {
-			bounce_dir = glm::reflect(hit_point.ray_direction, hit_point.surface_normal);
-		}else {
-			bounce_dir = uniform_normal(dist_, gen_);
-		}
+		glm::vec3 bounce_dir = uniform_normal(dist_, gen_);
 		float cos_theta = glm::dot(hit_point.surface_normal, bounce_dir);
 
 		if (cos_theta < 0) {
 			bounce_dir *= -1;
 			cos_theta *= -1;
 		}
-		bounced_light += material->emit_color + trace({hit_point.position, bounce_dir}, scene, ray_bounces + 1) * material->kd * 2 * cos_theta;
+		bounced_light += trace({hit_point.position, bounce_dir}, scene, 1, ray_bounces + 1) * 2 * cos_theta;
 	}
 	if (samples > 1) {
 		bounced_light *= 1.0f / samples;
 	}
-	return bounced_light;
+	return material->emit_color + bounced_light * material->kd;
+}
+
+Color Renderer::reflection(HitPoint const& hit_point, Scene const& scene, unsigned samples, unsigned ray_bounces) {
+	glm::vec3 ray_dir = hit_point.ray_direction;
+	glm::vec3 normal = hit_point.surface_normal;
+
+	float cos_incoming = -glm::dot(normal, ray_dir);
+	glm::vec3 reflect_dir = ray_dir + (normal * cos_incoming * 2.0f);
+
+	Color reflected_light {};
+	Ray reflect_ray = {hit_point.position, reflect_dir};
+//	float glossy = 0.2;
+
+//	for (unsigned i = 0; i < samples; ++i) {
+//		glm::vec3 bounce_dir = uniform_normal(dist_, gen_);
+//		float cos_theta = glm::dot(hit_point.surface_normal, bounce_dir);
+
+//		if (cos_theta < 0) {
+//			bounce_dir *= -1;
+//			cos_theta *= -1;
+//		}
+//		glm::vec3 glossy_dir = reflect_dir * (1 - glossy) + bounce_dir * glossy;
+		reflected_light += trace(reflect_ray, scene, samples, ray_bounces + 1);
+//	}
+//	if (samples > 1) {
+//		reflected_light *= 1.0f / samples;
+//	}
+	return reflected_light * hit_point.hit_material->ks;
+}
+
+Color Renderer::refraction(HitPoint const& hit_point, Scene const& scene, unsigned samples, unsigned ray_bounces) {
+	glm::vec3 ray_dir = hit_point.ray_direction;
+	glm::vec3 normal = hit_point.surface_normal;
+	float eta = 1 / hit_point.hit_material->ior;
+	float cos_incoming = -glm::dot(normal, ray_dir);
+
+	//inverts negative incoming angle and normal vector if surface is hit from behind
+	if (cos_incoming < 0) {
+		eta = 1 / eta;
+		cos_incoming *= -1;
+		normal *= -1;
+	}
+	float cos_outgoing_squared = 1 - eta * eta * (1 - cos_incoming * cos_incoming);
+	Color refracted_light {};
+
+	//returns total reflection if critical angle is reached
+	if (cos_outgoing_squared < 0) {
+//		for (unsigned i = 0; i < samples; ++i) {
+			refracted_light += reflection(hit_point, scene, samples, ray_bounces);
+//		}
+	}else {
+		//glm::vec3 new_dir = glm::refract(ray_dir, normal, eta);
+		glm::vec3 refract_dir = ray_dir * eta + normal * (eta * cos_incoming - sqrtf(cos_outgoing_squared));
+		Ray refract_ray {hit_point.position - normal * (2 * EPSILON), refract_dir};
+
+//		for (unsigned i = 0; i < samples; ++i) {
+			refracted_light += trace(refract_ray, scene, samples, ray_bounces + 1);
+//		}
+	}
+//	if (samples > 1) {
+//		refracted_light *= 1.0f / samples;
+//	}
+	return refracted_light * hit_point.hit_material->kd;
+}
+
+//https://blog.demofox.org/2017/01/09/raytracing-reflection-refraction-fresnel-total-internal-reflection-and-beers-law/
+//https://en.wikipedia.org/wiki/Schlick%27s_approximation
+float Renderer::schlick_reflection_ratio(glm::vec3 const& ray_dir, glm::vec3 const& normal, float const& ior) const {
+	float n1 = 1;
+	float n2 = ior;
+	float cos_incoming = -glm::dot(normal, ray_dir);
+
+	if (cos_incoming < 0) {
+		std::swap(n1, n2);
+	}
+	if (n1 > n2) {
+		float eta = n1 / n2;
+		float sin_outgoing_squared = eta * eta * (1 - cos_incoming * cos_incoming);
+
+		if (sin_outgoing_squared >= 1) {
+			return 1;
+		}
+		cos_incoming = sqrtf(1 - sin_outgoing_squared);
+	}
+
+	float min_reflectance = (1 - ior) / (1 + ior);
+	min_reflectance *= min_reflectance;
+
+	float factor = 1 - cos_incoming;
+	float ratio = min_reflectance + (1 - min_reflectance) * factor * factor * factor * factor * factor;
+	return ratio;
 }
 
 Color Renderer::tone_map_color(Color color) const {

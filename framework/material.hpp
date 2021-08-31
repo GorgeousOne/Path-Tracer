@@ -9,20 +9,18 @@
 //Aufgabe 6.4
 struct Material {
 	std::string name = "default";
-	//ambient color reflection coefficient
-	Color ka = {0.2, 0.2, 0.2};
 	//diffuse color reflection coefficient
 	Color kd = {0.5, 0.5, 0.5};
 	//specular reflection coefficient
 	Color ks = {};
-	//specular reflection exponent
-	float m = 0;
 
-	float glossiness = 0;
+	float glossy = 0;
 
 	float opacity = 1;
 
 	float emittance = 0;
+
+	float ior = 1;
 
 	Color emit_color = kd * emittance;
 };

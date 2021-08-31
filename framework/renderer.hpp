@@ -107,13 +107,18 @@ private:
 	vector2d<std::shared_ptr<Material>> material_buffer_;
 
 	Color primary_trace(unsigned x, unsigned y, Ray const& ray, Scene const& scene);
-	Color trace(Ray const& ray, Scene const& scene, unsigned ray_bounces);
+	Color trace(Ray const& ray, Scene const& scene, unsigned samples, unsigned ray_bounces);
 	HitPoint get_closest_hit(Ray const& ray, Scene const& scene) const;
-	Color bounce_color(HitPoint const &hit_point, Scene const &scene, unsigned samples, unsigned ray_bounces);
-
-	void denoise();
+//	Color bounce_color(HitPoint const &hit_point, Scene const &scene, unsigned samples, unsigned ray_bounces);
+	Color shade(HitPoint const &hit_point, Scene const &scene, unsigned int samples, unsigned ray_bounces);
+//	void denoise();
 
 	Color tone_map_color(Color color) const;
+	Color reflection(HitPoint const &point, Scene const &scene, unsigned samples, unsigned bounces);
+	Color refraction(HitPoint const &hit_point, Scene const &scene, unsigned samples, unsigned ray_bounces);
+	float schlick_reflection_ratio(glm::vec3 const &ray_dir, glm::vec3 const &normal, float const &ior) const;
+
+	Color diffuse(HitPoint const &hit_point, Scene const &scene, unsigned int samples, unsigned int ray_bounces);
 };
 
 #endif // #ifndef BUW_RENDERER_HPP

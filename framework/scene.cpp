@@ -8,7 +8,8 @@
 #include "renderer.hpp"
 
 std::shared_ptr<Material> Scene::find_mat(std::string const& name) const {
-	return materials.find(name)->second;
+	auto it =  materials.find(name);
+	return materials.end() != it ? it->second : nullptr;
 }
 
 glm::vec3 load_vec(std::istringstream& arg_stream) {
@@ -25,23 +26,23 @@ Color load_color(std::istringstream& arg_stream) {
 
 std::shared_ptr<Material> load_mat(std::istringstream& arg_stream) {
 	std::string name;
-	float brightness;
 	float glossiness;
 	float opacity;
 	float emittance;
+	float ior;
 
 	arg_stream >> name;
-	Color ka = load_color(arg_stream);
 	Color kd = load_color(arg_stream);
 	Color ks = load_color(arg_stream);
-	arg_stream >> brightness;
 	arg_stream >> glossiness;
 	arg_stream >> opacity;
 	arg_stream >> emittance;
-	return std::make_shared<Material>(Material{name, ka, kd, ks, brightness, glossiness, opacity, emittance});
+	arg_stream >> ior;
+
+	return std::make_shared<Material>(Material{name, kd, ks, glossiness, opacity, emittance, ior});
 }
 
-std::shared_ptr<Box> load_box(std::istringstream& arg_stream, std::map<std::string, std::shared_ptr<Material>> const& materials) {
+std::shared_ptr<Box> load_box(std::istringstream& arg_stream, Scene const& scene) {
 	std::string name;
 	std::string mat_name;
 
@@ -50,11 +51,12 @@ std::shared_ptr<Box> load_box(std::istringstream& arg_stream, std::map<std::stri
 	glm::vec3 max = load_vec(arg_stream);
 	arg_stream >> mat_name;
 
-	auto it = materials.find(mat_name);
-	return std::make_shared<Box>(min, max, name, it->second);
+	auto mat = scene.find_mat(mat_name);
+	assert(nullptr != mat);
+	return std::make_shared<Box>(min, max, name, mat);
 }
 
-std::shared_ptr<Sphere> load_sphere(std::istringstream& arg_stream, std::map<std::string, std::shared_ptr<Material>> const& materials) {
+std::shared_ptr<Sphere> load_sphere(std::istringstream& arg_stream, Scene const& scene) {
 	std::string name;
 	std::string mat_name;
 	float radius;
@@ -64,11 +66,12 @@ std::shared_ptr<Sphere> load_sphere(std::istringstream& arg_stream, std::map<std
 	arg_stream >> radius;
 	arg_stream >> mat_name;
 
-	auto it = materials.find(mat_name);
-	return std::make_shared<Sphere>(radius, center, name, it->second);
+	auto mat = scene.find_mat(mat_name);
+	assert(nullptr != mat);
+	return std::make_shared<Sphere>(radius, center, name, mat);
 }
 
-std::shared_ptr<Triangle> load_triangle(std::istringstream& arg_stream, std::map<std::string, std::shared_ptr<Material>> const& materials) {
+std::shared_ptr<Triangle> load_triangle(std::istringstream& arg_stream, Scene const& scene) {
 	std::string name;
 	std::string mat_name;
 
@@ -78,8 +81,9 @@ std::shared_ptr<Triangle> load_triangle(std::istringstream& arg_stream, std::map
 	glm::vec3 v2 = load_vec(arg_stream);
 	arg_stream >> mat_name;
 
-	auto it = materials.find(mat_name);
-	return std::make_shared<Triangle>(v0, v1, v2, name, it->second);
+	auto mat = scene.find_mat(mat_name);
+	assert(nullptr != mat);
+	return std::make_shared<Triangle>(v0, v1, v2, name, mat);
 }
 
 PointLight load_point_light(std::istringstream& arg_stream) {
@@ -147,21 +151,17 @@ std::map<std::string, std::shared_ptr<Material>> load_obj_materials(std::string 
 			current_mat = std::make_shared<Material>();
 			arg_stream >> current_mat->name;
 			materials.emplace(current_mat->name, current_mat);
-		} else if ("Ka" == token) {
-			current_mat->ka = load_color(arg_stream);
 		} else if ("Kd" == token) {
 			current_mat->kd = load_color(arg_stream);
 		} else if ("Ks" == token) {
 			current_mat->ks = load_color(arg_stream);
-		} else if ("Ns" == token) {
-			arg_stream >> current_mat->m;
 		} else if ("illum" == token) {
 			unsigned model;
 			arg_stream >> model;
 
 			switch (model) {
 				case 2:
-					current_mat->glossiness = 0.5;
+					current_mat->glossy = 0.5;
 					break;
 			}
 		}
@@ -294,11 +294,11 @@ void add_to_scene(std::istringstream& arg_stream, Scene& scene) {
 	if ("shape" == token) {
 		arg_stream >> token;
 		if ("box" == token) {
-			scene.root->add_child(load_box(arg_stream, scene.materials));
+			scene.root->add_child(load_box(arg_stream, scene));
 		} else if ("sphere" == token) {
-			scene.root->add_child(load_sphere(arg_stream, scene.materials));
+			scene.root->add_child(load_sphere(arg_stream, scene));
 		} else if ("triangle" == token) {
-			scene.root->add_child(load_triangle(arg_stream, scene.materials));
+			scene.root->add_child(load_triangle(arg_stream, scene));
 		} else if ("obj" == token) {
 			std::string obj_file_name;
 			arg_stream >> obj_file_name;
@@ -338,7 +338,7 @@ void transform(std::istringstream& arg_stream, Scene& scene) {
 		arg_stream >> yaw;
 		arg_stream >> pitch;
 		arg_stream >> roll;
-		shape->rotate(yaw, pitch, roll);
+		shape->rotate(glm::radians(yaw), glm::radians(pitch), glm::radians(roll));
 
 	} else if ("scale" == action) {
 		float scale;
